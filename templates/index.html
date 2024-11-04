@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Staff Regulations</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <script src="{{ url_for('static', filename='pdfjs/pdf.js') }}"></script>
+</head>
+<body>
+    <nav>
+        <ul>
+            <li><a href="#" onclick="loadPDF('sop-how-to-do.pdf')">SOP - How to Do</a></li>
+            <!-- Add more links as needed -->
+        </ul>
+    </nav>
+    <div id="pdf-viewer" style="width: 600px; height: 800px;"></div>
+
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = "{{ url_for('static', filename='pdfjs/pdf.worker.js') }}";
+
+        function loadPDF(pdfName) {
+            const url = `/static/pdfs/${pdfName}`;
+            pdfjsLib.getDocument(url).promise.then(pdf => {
+                pdf.getPage(1).then(page => {
+                    const scale = 1.5;
+                    const viewport = page.getViewport({ scale: scale });
+                    const canvas = document.createElement('canvas');
+                    const context = canvas.getContext('2d');
+                    canvas.height = viewport.height;
+                    canvas.width = viewport.width;
+                    document.getElementById('pdf-viewer').innerHTML = '';
+                    document.getElementById('pdf-viewer').appendChild(canvas);
+
+                    page.render({
+                        canvasContext: context,
+                        viewport: viewport
+                    });
+                });
+            });
+        }
+    </script>
+</body>
+</html>
