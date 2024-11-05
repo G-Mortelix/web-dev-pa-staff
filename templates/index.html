@@ -1,42 +1,239 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>Staff Regulations</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
-    <script src="{{ url_for('static', filename='pdfjs/pdf.js') }}"></script>
+    <title>Staff Rules and Regulations</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style/styles.css') }}">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.min.js"></script>
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.worker.min.js";
+    </script>
 </head>
 <body>
-    <nav>
-        <ul>
-            <li><a href="#" onclick="loadPDF('sop-how-to-do.pdf')">SOP - How to Do</a></li>
-            <!-- Add more links as needed -->
-        </ul>
-    </nav>
-    <div id="pdf-viewer" style="width: 600px; height: 800px;"></div>
+
+    <header>
+        <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Company Logo" class="logo">
+        <h1>Staff Rules and Regulations</h1>
+        <a href="{{ url_for('logout') }}" class="logout-button">Logout</a>
+    </header>
+    
+
+    <div class="container">
+        <aside class="sidebar">
+            <div class="management-controls">
+                <button onclick="manageAccess('addFolder')">Add Folder</button>
+                <button onclick="showUploadForm()">Add PDF</button>
+                <button onclick="manageAccess('deleteFolder')">Delete Folder</button>
+                <button onclick="manageAccess('deletePDF')">Delete PDF</button>
+            </div>
+
+            {% for folder, pdffile in pdf_structure.items() %}
+                <h2>{{ folder | replace("_", " ") | capitalize }}</h2>
+                <ul>
+                    {% for pdf in pdffile %}
+                        <li><a href="#" onclick="loadPDF('{{ folder }}/{{ pdf }}'); return false;">{{ pdf | replace("_", " ") }}</a></li>
+                    {% endfor %}
+                </ul>
+            {% endfor %}
+        </aside>
+
+        <!-- Upload PDF Form (Initially Hidden) -->
+        <div id="upload-pdf-form" style="display: none;">
+            <h3>Upload a PDF</h3>
+            <form id="pdfUploadForm" enctype="multipart/form-data">
+                <label for="folderSelect">Select Folder:</label>
+                <select id="folderSelect" name="folder">
+                    {% for folder in pdf_structure.keys() %}
+                        <option value="{{ folder }}">{{ folder | replace("_", " ") | capitalize }}</option>
+                    {% endfor %}
+                </select>
+                <label for="pdfFile">Choose PDF:</label>
+                <input type="file" id="pdfFile" name="pdfFile" accept=".pdf" required>
+                <button type="button" onclick="uploadPDF()">Upload PDF</button>
+                <button type="button" onclick="hideUploadForm()">Cancel</button>
+            </form>
+        </div>
+
+        <main class="pdf-viewer-container">
+            <div id="welcome-message">
+                <h2>Welcome to the Staff Regulations Portal</h2>
+                <p>Select a document from the sidebar to view it here.</p>
+            </div>
+            <div id="pdf-viewer"></div>
+        </main>
+    </div>
 
     <script>
-        pdfjsLib.GlobalWorkerOptions.workerSrc = "{{ url_for('static', filename='pdfjs/pdf.worker.js') }}";
+        // Function to load and render a PDF
+        function loadPDF(pdfPath) {
+            const url = "{{ url_for('static', filename='pdffile') }}/" + pdfPath;
 
-        function loadPDF(pdfName) {
-            const url = `/static/pdfs/${pdfName}`;
+            document.getElementById('welcome-message').style.display = 'none';
+            document.getElementById('pdf-viewer').innerHTML = '';
+
             pdfjsLib.getDocument(url).promise.then(pdf => {
-                pdf.getPage(1).then(page => {
-                    const scale = 1.5;
-                    const viewport = page.getViewport({ scale: scale });
-                    const canvas = document.createElement('canvas');
-                    const context = canvas.getContext('2d');
-                    canvas.height = viewport.height;
-                    canvas.width = viewport.width;
-                    document.getElementById('pdf-viewer').innerHTML = '';
-                    document.getElementById('pdf-viewer').appendChild(canvas);
 
-                    page.render({
-                        canvasContext: context,
-                        viewport: viewport
+                // Loop through each page in the PDF and render it
+                for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+                    pdf.getPage(pageNum).then(page => {
+                        const scale = 1.0;
+                        const viewport = page.getViewport({ scale: scale });
+
+                        const canvas = document.createElement('canvas');
+                        const context = canvas.getContext('2d');
+                        canvas.height = viewport.height;
+                        canvas.width = viewport.width;
+
+                        document.getElementById('pdf-viewer').appendChild(canvas);
+
+                        page.render({
+                            canvasContext: context,
+                            viewport: viewport
+                        });
                     });
-                });
+                }
             });
         }
+    </script>
+    <script>
+        // Lock feature: prompts for a password before allowing folder/PDF management
+        function manageAccess(action) {
+            // Check if the session is already authenticated for management
+            fetch('/validate_management_password', {
+                method: 'GET'
+            }).then(response => response.json()).then(data => {
+                if (data.authenticated) {
+                    // Session is authenticated, proceed with the action
+                    performAction(action);
+                } else {
+                    // Prompt for password if not authenticated
+                    const password = prompt("Enter the admin password to proceed:");
+                    if (password) {
+                        fetch('/validate_management_password', {
+                            method: 'POST',
+                            headers: {
+                                "Content-Type": "application/json"
+                            },
+                            body: JSON.stringify({ password })
+                        }).then(response => response.json()).then(data => {
+                            if (data.success) {
+                                // Password is correct, proceed with the action
+                                performAction(action);
+                            } else {
+                                alert(data.error);  // Incorrect password message
+                            }
+                        });
+                    }
+                }
+            });
+        }
+
+        function performAction(action) {
+            if (action === 'addFolder') {
+                addFolder();
+            } else if (action === 'addPDF') {
+                uploadPDF();
+            } else if (action === 'deleteFolder') {
+                deleteFolder();
+            } else if (action === 'deletePDF') {
+                deletePDF();
+            }
+        }
+    
+        function addFolder() {
+            const folderName = prompt("Enter the name of the new folder:");
+            if (folderName) {
+                fetch(`/add_folder`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({ folderName })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        location.reload(); // Reload the page to show the new folder
+                    } else {
+                        alert(data.error);
+                    }
+                });
+            }
+        }
+    
+        function deleteFolder() {
+            const folderName = prompt("Enter the name of the folder to delete:");
+            if (folderName) {
+                fetch(`/delete_folder`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({ folderName })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        location.reload(); // Reload the page to reflect changes
+                    } else {
+                        alert(data.error);
+                    }
+                });
+            }
+        }
+    
+        function deletePDF() {
+            const folderName = prompt("Enter the folder name containing the PDF:");
+            const pdfName = prompt("Enter the PDF file name to delete (with .pdf extension):");
+            if (folderName && pdfName) {
+                if (confirm(`Are you sure you want to delete ${pdfName}? This action cannot be undone.`)) {
+                    fetch(`/delete_pdf`, {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json"
+                        },
+                        body: JSON.stringify({ folderName, pdfName })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            location.reload(); // Reload to reflect changes
+                        } else {
+                            alert(data.error);
+                        }
+                    });
+                }
+            }
+        }
+
+        // Show the upload form
+        function showUploadForm() {
+            document.getElementById('upload-pdf-form').style.display = 'block';
+        }
+    
+        // Hide the upload form
+        function hideUploadForm() {
+            document.getElementById('upload-pdf-form').style.display = 'none';
+        }
+    
+        // Upload PDF function
+        function uploadPDF() {
+            const formData = new FormData(document.getElementById('pdfUploadForm'));
+            
+            fetch('/upload_pdf', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert("PDF uploaded successfully!");
+                    location.reload();  // Reload the page to show the new PDF
+                } else {
+                    alert("Error: " + data.error);
+                }
+            });
+        }
+
     </script>
 </body>
 </html>
