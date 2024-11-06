@@ -124,7 +124,6 @@ def delete_folder():
 @app.route('/upload_pdf', methods=['POST'])
 @login_required
 def upload_pdf():
-    # Check if the user is authenticated for management operations
     if not session.get('management_authenticated'):
         return jsonify(success=False, error="Authentication required.")
     

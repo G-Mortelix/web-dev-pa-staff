@@ -11,7 +11,7 @@
 <body>
 
     <header>
-        <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Company Logo" class="logo">
+        <img src="{{ url_for('static', filename='icons/proamity-logo.png') }}" alt="Company Logo" class="logo">
         <h1>Staff Rules and Regulations</h1>
         <a href="{{ url_for('logout') }}" class="logout-button">Logout</a>
     </header>
@@ -55,7 +55,7 @@
 
         <main class="pdf-viewer-container">
             <div id="welcome-message">
-                <h2>Welcome to the Staff Regulations Portal</h2>
+                <h2>Welcome to Pro Amity Corporate Staff Website</h2>
                 <p>Select a document from the sidebar to view it here.</p>
             </div>
             <div id="pdf-viewer"></div>
@@ -142,7 +142,7 @@
         function addFolder() {
             const folderName = prompt("Enter the name of the new folder:");
             if (folderName) {
-                fetch(`/add_folder`, {
+                fetch('/add_folder', {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json"
@@ -163,7 +163,7 @@
         function deleteFolder() {
             const folderName = prompt("Enter the name of the folder to delete:");
             if (folderName) {
-                fetch(`/delete_folder`, {
+                fetch('/delete_folder', {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json"
@@ -185,8 +185,8 @@
             const folderName = prompt("Enter the folder name containing the PDF:");
             const pdfName = prompt("Enter the PDF file name to delete (with .pdf extension):");
             if (folderName && pdfName) {
-                if (confirm(`Are you sure you want to delete ${pdfName}? This action cannot be undone.`)) {
-                    fetch(`/delete_pdf`, {
+                if (confirm('Are you sure you want to delete ${pdfName}? This action cannot be undone.')) {
+                    fetch('/delete_pdf', {
                         method: "POST",
                         headers: {
                             "Content-Type": "application/json"
