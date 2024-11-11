@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>Staff Rules and Regulations</title>
+    <title>Internal Website Pro Amity Corporate Sdn Bhd</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style/styles.css') }}">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.min.js"></script>
     <script>
@@ -13,28 +13,40 @@
         <img src="{{ url_for('static', filename='icons/proamity-logo.png') }}" alt="Company Logo" class="logo">
         <h1>Library</h1>
         <a href="{{ url_for('logout') }}" class="logout-button">Logout</a>
+        {% if current_user.role_id == 1 %}
+            <a href="{{ url_for('admin_dashboard') }}" class="dashboard-button">Admin Dashboard</a>
+        {% endif %}
     </header>
 
     <div class="container">
         <aside class="sidebar">
-            <div class="management-controls">
-                <button onclick="manageAccess('addFolder')">Add Folder</button>
-                <button onclick="showUploadForm()">Add PDF</button>
-                <button onclick="manageAccess('deleteFolder')">Delete Folder</button>
-                <button onclick="manageAccess('deletePDF')">Delete PDF</button>
-            </div>
+            {% if current_user.role_id == 1 %}
+                <div class="management-controls">
+                    <button onclick="addFolder()">Add Folder</button>
+                    <button onclick="showUploadForm()">Add PDF</button>
+                </div>
+            {% endif %}
 
             {% for folder, pdffile in pdf_structure.items() %}
-                <h2>{{ folder | replace("_", " ") | capitalize }}</h2>
+                <h2>
+                    {{ folder }}
+                    {% if current_user.role_id == 1 %}
+                        <button onclick="deleteFolder('{{ folder }}')">🗑️</button>
+                    {% endif %}
+                </h2>
                 <ul>
                     {% for pdf in pdffile %}
-                        <li><a href="#" onclick="loadPDF('{{ folder }}/{{ pdf }}'); return false;">{{ pdf | replace("_", " ") }}</a></li>
+                        <li>
+                            <a href="#" onclick="loadPDF('{{ folder }}/{{ pdf }}'); return false;">{{ pdf }}</a>
+                            {% if current_user.role_id == 1 %}
+                                <button onclick="deletePDF('{{ folder }}', '{{ pdf }}')">🗑️</button>
+                            {% endif %}
+                        </li>
                     {% endfor %}
                 </ul>
             {% endfor %}
         </aside>
 
-        <!-- Upload PDF Form (Initially Hidden) -->
         <div id="upload-pdf-form" style="display: none;">
             <h3>Upload a PDF</h3>
             <form id="pdfUploadForm" enctype="multipart/form-data">
@@ -69,7 +81,6 @@
             document.getElementById('pdf-viewer').innerHTML = '';
 
             pdfjsLib.getDocument(url).promise.then(pdf => {
-
                 // Loop through each page in the PDF and render it
                 for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
                     pdf.getPage(pageNum).then(page => {
@@ -91,39 +102,6 @@
                 }
             });
         }
-    </script>
-    <script>
-        // Lock feature: prompts for a password before allowing folder/PDF management
-        function manageAccess(action) {
-            // Check if the session is already authenticated for management
-            fetch('/validate_management_password', {
-                method: 'GET'
-            }).then(response => response.json()).then(data => {
-                if (data.authenticated) {
-                    // Session is authenticated, proceed with the action
-                    performAction(action);
-                } else {
-                    // Prompt for password if not authenticated
-                    const password = prompt("Enter the admin password to proceed:");
-                    if (password) {
-                        fetch('/validate_management_password', {
-                            method: 'POST',
-                            headers: {
-                                "Content-Type": "application/json"
-                            },
-                            body: JSON.stringify({ password })
-                        }).then(response => response.json()).then(data => {
-                            if (data.success) {
-                                // Password is correct, proceed with the action
-                                performAction(action);
-                            } else {
-                                alert(data.error);  // Incorrect password message
-                            }
-                        });
-                    }
-                }
-            });
-        }
 
         function performAction(action) {
             if (action === 'addFolder') {
@@ -139,13 +117,15 @@
     
         function addFolder() {
             const folderName = prompt("Enter the name of the new folder:");
-            if (folderName) {
+            const deptName = prompt("Enter the department name for the new folder:");
+
+            if (folderName && deptName) {
                 fetch('/add_folder', {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json"
                     },
-                    body: JSON.stringify({ folderName })
+                    body: JSON.stringify({ folderName, deptName })
                 })
                 .then(response => response.json())
                 .then(data => {
@@ -155,23 +135,24 @@
                         alert(data.error);
                     }
                 });
+            } else {
+                alert("Folder name and department name are required.");
             }
         }
     
-        function deleteFolder() {
-            const folderName = prompt("Enter the name of the folder to delete:");
-            if (folderName) {
+        function deleteFolder(folderName) {
+            const deptName = prompt("Enter the department name of the folder:");
+            if (deptName) {
                 fetch('/delete_folder', {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
-                    body: JSON.stringify({ folderName })
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ folderName: folderName, deptName: deptName })
                 })
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
-                        location.reload(); // Reload the page to reflect changes
+                        alert("Folder deleted successfully!");
+                        location.reload();
                     } else {
                         alert(data.error);
                     }
@@ -179,28 +160,21 @@
             }
         }
     
-        function deletePDF() {
-            const folderName = prompt("Enter the folder name containing the PDF:");
-            const pdfName = prompt("Enter the PDF file name to delete (with .pdf extension):");
-            if (folderName && pdfName) {
-                if (confirm('Are you sure you want to delete ${pdfName}? This action cannot be undone.')) {
-                    fetch('/delete_pdf', {
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "application/json"
-                        },
-                        body: JSON.stringify({ folderName, pdfName })
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            location.reload(); // Reload to reflect changes
-                        } else {
-                            alert(data.error);
-                        }
-                    });
+        function deletePDF(folderName, pdfName) {
+            fetch('/delete_pdf', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ folderName: folderName, pdfName: pdfName })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert("PDF deleted successfully!");
+                    location.reload();
+                } else {
+                    alert(data.error);
                 }
-            }
+            });
         }
 
         // Show the upload form
@@ -231,7 +205,6 @@
                 }
             });
         }
-
     </script>
 </body>
 </html>

@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Manage Permissions</title>
+</head>
+<body>
+    <h1>Manage Permissions</h1>
+    <table>
+        <tr>
+            <th>Role</th>
+            <th>Folder</th>
+            <th>Read</th>
+            <th>Write</th>
+            <th>Delete</th>
+            <th>Actions</th>
+        </tr>
+        {% for permission in permissions %}
+            <tr>
+                <td>{{ permission.role.role_name }}</td>
+                <td>{{ permission.folder.folder_name }}</td>
+                <td>{{ 'Yes' if permission.read_permission else 'No' }}</td>
+                <td>{{ 'Yes' if permission.write_permission else 'No' }}</td>
+                <td>{{ 'Yes' if permission.delete_permission else 'No' }}</td>
+                <td><a href="{{ url_for('edit_permission', permission_id=permission.permission_id) }}">Edit</a></td>
+            </tr>
+        {% endfor %}
+    </table>
+</body>
+</html>
