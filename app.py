@@ -1,12 +1,12 @@
-import os, shutil
-from flask import Flask, render_template, redirect, url_for, request, flash, jsonify, session, abort
-from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
-from flask_sqlalchemy import SQLAlchemy
+import os, re, shutil
+from functools import wraps
+from dotenv import load_dotenv
 from flask_migrate import Migrate
+from flask_sqlalchemy import SQLAlchemy
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
-from dotenv import load_dotenv
-from functools import wraps
+from flask import Flask, render_template, redirect, url_for, request, flash, jsonify, session, abort
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 
 load_dotenv()
 
@@ -161,6 +161,12 @@ def add_folder():
 
     return jsonify(success=True)
 
+def sanitize_folder_name(name):
+    # Replace any character that is not alphanumeric, space, hyphen, or underscore
+    sanitized_name = re.sub(r'[<>:"/\\|?*]', "", name)
+    sanitized_name = sanitized_name.strip()  # Remove leading and trailing whitespace
+    return sanitized_name
+
 @app.route('/upload_pdf', methods=['POST'])
 @login_required
 def upload_pdf():
@@ -175,6 +181,8 @@ def upload_pdf():
     folder_name = request.form.get('folder').strip()
     filename = secure_filename(file.filename.strip())
 
+    sanitized_folder_name = sanitize_folder_name(folder_name)
+
     # Validate that a folder was selected and file is a PDF
     if not folder_name or file.filename == '':
         return jsonify(success=False, error="Folder or file not specified.")
@@ -187,7 +195,7 @@ def upload_pdf():
     if not folder:
         return jsonify(success=False, error="Folder not found.")
     
-    folder_path = os.path.join(app.static_folder, 'pdffile', folder_name)
+    folder_path = os.path.join(app.static_folder, 'pdffile', sanitized_folder_name)
     os.makedirs(folder_path, exist_ok=True)
     file_path = os.path.join(folder_path, filename)
     file.save(file_path)

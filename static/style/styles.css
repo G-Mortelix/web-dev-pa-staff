@@ -5,6 +5,7 @@
     margin: 0;
     padding: 0;
     box-sizing: border-box;
+    font-family: Georgia, 'Times New Roman', Times, serif;
 }
 
 /* Basic Layout */
@@ -14,36 +15,81 @@ body {
     flex-direction: column;
 }
 
+/* Style for the entire header */
 header {
     display: flex;
     align-items: center;
-    padding: 15px;
     background-color: #ffffff;
     color: #000000;
+    padding: 10px 20px;
+    border-bottom: 2px solid #ccc;
 }
 
-header .logo {
+/* Logo section */
+.header-logo {
+    flex: 1;
+}
+
+.header-logo .logo {
     width: 150px;
     height: 80px;
-    margin-right: 90px;
 }
 
-header h1 {
+/* Title and message section */
+.header-title {
+    flex: 2;
+}
+
+.header-title h1 {
     font-size: 1.5rem;
+    margin: 0;
 }
 
-.logout-button {
-    margin-left: auto;
-    padding: 10px 15px;
-    background-color: #f44336;
-    color: #000000;
+.confidential-message {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #a00; /* Red color for warning */
+    margin: 5px 0 0 0;
+}
+
+/* Buttons section */
+.header-buttons {
+    flex: 1;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+.header-buttons .dashboard-button {
+    font-size: 0.9rem;
+    color: #333;
     text-decoration: none;
-    border-radius: 5px; 
+    padding: 8px 12px;
+    border: 1px solid #333;
+    border-radius: 4px;
+    background-color: #ffdfab;
 }
 
-.logout-button:hover {
-    background-color: #d32f2f;
+.header-buttons .logout-button {
+    font-size: 0.9rem;
+    color: #333;
+    text-decoration: none;
+    padding: 8px 12px;
+    border: 1px solid #333;
+    border-radius: 4px;
+    background-color: #ffabab;
 }
+
+.header-buttons .dashboard-button:hover {
+    background-color: #876936;
+    color: white;
+}
+
+.header-buttons .logout-button:hover {
+    background-color: rgb(183, 0, 0);
+    color: white;
+}
+
 
 .container {
     display: flex;
@@ -55,6 +101,7 @@ header h1 {
     background-color: #f4f4f4;
     padding: 20px;
     overflow-y: auto;
+    overflow-x: auto;
 }
 
 .sidebar h2 {

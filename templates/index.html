@@ -10,14 +10,25 @@
 </head>
 <body>
     <header>
-        <img src="{{ url_for('static', filename='icons/proamity-logo.png') }}" alt="Company Logo" class="logo">
-        <h1>Library</h1>
-        <a href="{{ url_for('logout') }}" class="logout-button">Logout</a>
-        {% if current_user.role_id == 1 %}
-            <a href="{{ url_for('admin_dashboard') }}" class="dashboard-button">Admin Dashboard</a>
-        {% endif %}
+        <div class="header-logo">
+            <img src="{{ url_for('static', filename='icons/proamity-logo.png') }}" alt="Company Logo" class="logo">
+        </div>
+        <div class="header-title">
+            <h1>Library</h1>
+            <p class="confidential-message">Confidential notice: The information on this website, 
+                including any documents, is confidential and legally privileged, intended solely for 
+                use by the designated individual or entity. Unauthorized access, disclosure, or distribution 
+                of this information is strictly prohibited. Any unintended access should cease immediately, 
+                and the administrator should be notified.</p>
+        </div>
+        <div class="header-buttons">
+            {% if current_user.role_id == 1 %}
+                <a href="{{ url_for('admin_dashboard') }}" class="dashboard-button">Admin Dashboard</a>
+            {% endif %}
+            <a href="{{ url_for('logout') }}" class="logout-button">Logout</a>
+        </div>
     </header>
-
+    
     <div class="container">
         <aside class="sidebar">
             {% if current_user.role_id == 1 %}
@@ -39,7 +50,7 @@
                         <li>
                             <a href="#" onclick="loadPDF('{{ folder }}/{{ pdf }}'); return false;">{{ pdf }}</a>
                             {% if current_user.role_id == 1 %}
-                                <button onclick="deletePDF('{{ folder }}', '{{ pdf }}')">🗑️</button>
+                                <button onclick="deletePDF('{{ folder }}', '{{ pdf }}')" class="delete-pdf-btn">🗑️</button>
                             {% endif %}
                         </li>
                     {% endfor %}
@@ -53,7 +64,7 @@
                 <label for="folderSelect">Select Folder:</label>
                 <select id="folderSelect" name="folder">
                     {% for folder in pdf_structure.keys() %}
-                        <option value="{{ folder }}">{{ folder | replace("_", " ") | capitalize }}</option>
+                        <option value="{{ folder }}">{{ folder }}</option>
                     {% endfor %}
                 </select>
                 <label for="pdfFile">Choose PDF:</label>
@@ -141,40 +152,48 @@
         }
     
         function deleteFolder(folderName) {
-            const deptName = prompt("Enter the department name of the folder:");
-            if (deptName) {
-                fetch('/delete_folder', {
+
+            if (confirm(`Are you sure you want to delete folder "${folderName}"? This action cannot be undone.`)) {
+                const deptName = prompt("Enter the department name of the folder:");
+
+                if (deptName) {
+                    fetch('/delete_folder', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ folderName: folderName, deptName: deptName })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            alert("Folder deleted successfully!");
+                            location.reload();
+                        } else {
+                            alert(data.error);
+                        }
+                    });
+                }
+            } else {
+                console.log("PDF deletion is cancelled.");
+            }
+        }
+    
+        function deletePDF(folderName, pdfName) {
+            if (confirm(`Are you sure you want to delete the PDF "${pdfName}" from folder "${folderName}"? This action cannot be undone.`)) {
+                fetch('/delete_pdf', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ folderName: folderName, deptName: deptName })
+                    body: JSON.stringify({ folderName: folderName, pdfName: pdfName })
                 })
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
-                        alert("Folder deleted successfully!");
+                        alert("PDF deleted successfully!");
                         location.reload();
                     } else {
                         alert(data.error);
                     }
                 });
             }
-        }
-    
-        function deletePDF(folderName, pdfName) {
-            fetch('/delete_pdf', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ folderName: folderName, pdfName: pdfName })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    alert("PDF deleted successfully!");
-                    location.reload();
-                } else {
-                    alert(data.error);
-                }
-            });
         }
 
         // Show the upload form
@@ -189,6 +208,7 @@
     
         // Upload PDF function
         function uploadPDF() {
+            
             const formData = new FormData(document.getElementById('pdfUploadForm'));
             
             fetch('/upload_pdf', {
