@@ -218,9 +218,8 @@ header {
 /* Main PDF Viewer */
 .pdf-viewer-container {
     flex: 1;
-    padding: 20px;
     overflow-y: auto;
-    background-color: aliceblue;
+    background-color: rgb(255, 253, 240);
 }
 
 #pdf-viewer canvas {

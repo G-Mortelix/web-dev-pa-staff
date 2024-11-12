@@ -37,6 +37,9 @@ class User(db.Model, UserMixin):
     role_id = db.Column(db.Integer, db.ForeignKey('roles.role_id'))
     dept_id = db.Column(db.Integer, db.ForeignKey('departments.dept_id'))
 
+    role = db.relationship('Role', backref='users')  # Add this line to create a relationship to Role
+    department = db.relationship('Department', backref='users')
+
     def get_id(self):
         return str(self.user_id)
 
@@ -132,7 +135,17 @@ def home():
 @login_required
 @super_admin_required
 def admin_dashboard():
-    return render_template('admin_dashboard.html')
+    roles = Role.query.all()
+    departments = Department.query.all()
+    permissions = Permission.query.all()
+    users = User.query.all()
+    return render_template(
+        'admin_dashboard.html',
+        roles=roles,
+        departments=departments,
+        permissions=permissions,
+        users=users
+    )
 
 @app.route('/add_folder', methods=['POST'])
 @login_required
@@ -175,20 +188,14 @@ def edit_folder():
     data = request.get_json()
     old_folder_name = data.get('oldFolderName', '').strip()
     new_folder_name = data.get('newFolderName', '').strip()
-    dept_name = data.get('deptName', '').strip()
 
-    # Check if the department exists
-    department = Department.query.filter_by(dept_name=dept_name).first()
-    if not department:
-        return jsonify(success=False, error="Department not found.")
-
-    # Locate the folder with the old name
-    folder = Folder.query.filter_by(folder_name=old_folder_name, dept_id=department.dept_id).first()
+    # Retrieve the folder based on the old folder name
+    folder = Folder.query.filter_by(folder_name=old_folder_name).first()
     if not folder:
         return jsonify(success=False, error="Folder not found.")
 
-    # Check if a folder with the new name already exists
-    existing_folder = Folder.query.filter_by(folder_name=new_folder_name, dept_id=department.dept_id).first()
+    # Check if a folder with the new name already exists in the same department
+    existing_folder = Folder.query.filter_by(folder_name=new_folder_name, dept_id=folder.dept_id).first()
     if existing_folder:
         return jsonify(success=False, error="A folder with this name already exists.")
 
@@ -197,7 +204,6 @@ def edit_folder():
     db.session.commit()
 
     return jsonify(success=True)
-
 
 @app.route('/upload_pdf', methods=['POST'])
 @login_required
@@ -242,26 +248,25 @@ def delete_folder():
     
     data = request.get_json()
     folder_name = data.get('folderName', '').strip()
-    dept_name = data.get('deptName', '').strip()
 
-    department = Department.query.filter_by(dept_name=dept_name).first()
-    if not department:
-        return jsonify(success=False, error="Department not found.")
-
-    folder = Folder.query.filter_by(folder_name=folder_name, dept_id=department.dept_id).first()
+    # Retrieve the folder based on the folder name
+    folder = Folder.query.filter_by(folder_name=folder_name).first()
     if not folder:
         return jsonify(success=False, error="Folder not found.")
 
+    # Remove folder from database
     db.session.delete(folder)
     db.session.commit()
 
+    # Define folder path for deletion from disk
     folder_path = os.path.join(app.static_folder, 'pdffile', folder_name)
     try:
         if os.path.exists(folder_path):
-            shutil.rmtree(folder_path)
+            shutil.rmtree(folder_path)  # Delete the folder and all contents
         return jsonify(success=True)
     except Exception as e:
         return jsonify(success=False, error=str(e))
+
     
 @app.route('/delete_pdf', methods=['POST'])
 @login_required
@@ -298,10 +303,31 @@ def delete_pdf():
     except Exception as e:
         return jsonify(success=False, error=str(e))
 
-@app.route('/register', methods=['GET', 'POST'])
+@app.route('/add_department', methods=['POST'])
+@login_required
+@super_admin_required
+def add_department():
+    dept_name = request.form['dept_name'].strip()
+    if not dept_name:
+        flash('Department name cannot be empty.')
+        return redirect(url_for('admin_dashboard'))
+
+    existing_dept = Department.query.filter_by(dept_name=dept_name).first()
+    if existing_dept:
+        flash('Department already exists.')
+        return redirect(url_for('admin_dashboard'))
+
+    new_department = Department(dept_name=dept_name)
+    db.session.add(new_department)
+    db.session.commit()
+
+    flash('Department added successfully!')
+    return redirect(url_for('admin_dashboard'))
+
+@app.route('/register', methods=['GET', 'POST'], endpoint='register_user')
 @super_admin_required
 @login_required
-def register():
+def register_user():
     roles = Role.query.all()
     departments = Department.query.all()
 
@@ -315,7 +341,7 @@ def register():
         existing_user = User.query.filter_by(username=username).first()
         if existing_user:
             flash('Username already taken. Please choose a different one.')
-            return redirect(url_for('register'))
+            return redirect(url_for('register_user'))
 
         # Hash the password
         hashed_password = generate_password_hash(password)
@@ -326,34 +352,21 @@ def register():
         db.session.commit()
         
         flash('User registered successfully!')
-        return redirect(url_for('home'))
+        return redirect(url_for('admin_dashboard'))
     
     return render_template('registration.html', roles=roles, departments=departments)
 
-@app.route('/manage_permissions')
+@app.route('/delete_user/<int:user_id>', methods=['POST'])
 @login_required
 @super_admin_required
-def manage_permissions():
-    permissions = Permission.query.all()
-    roles = Role.query.all()
-    folders = Folder.query.all()
-    return render_template('manage_permissions.html', permissions=permissions, roles=roles, folders=folders)
+def delete_user(user_id):
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify(success=False, error="User not found.")
 
-@app.route('/manage_folders')
-@login_required
-@super_admin_required
-def manage_folders():
-    folders = Folder.query.all()
-    departments = Department.query.all()
-    return render_template('manage_folders.html', folders=folders, departments=departments)
-
-@app.route('/manage_pdfs')
-@login_required
-@super_admin_required
-def manage_pdfs():
-    pdfs = PDF.query.all()
-    folders = Folder.query.all()
-    return render_template('manage_pdfs.html', pdfs=pdfs, folders=folders)
+    db.session.delete(user)
+    db.session.commit()
+    return jsonify(success=True)
 
 @app.route('/logout')
 @login_required

@@ -36,7 +36,8 @@
                     <h2 class="department-heading">{{ department }}</h2>
                     {% if current_user.role_id == 1 %}
                         <span class="dept-icons">
-                            <img src="{{ url_for('static', filename='icons/add-folder.png') }}" onclick="addFolder('{{ department }}')" class="add-folder-icon" alt="Add Folder">
+                            <img src="{{ url_for('static', filename='icons/add-folder.png') }}" 
+                            onclick="addFolder('{{ department }}')" class="add-folder-icon" alt="Add Folder">
                         </span>
                     {% endif %}
                 </div>
@@ -49,9 +50,12 @@
                         <span class="folder-name">{{ folder }}</span>
                         <span class="folder-icons">
                             {% if current_user.role_id == 1 %}
-                                <img src="{{ url_for('static', filename='icons/add-file.png') }}" onclick="addPDF('{{ folder }}')" class="add-pdf-icon" alt="Add PDF">
-                                <img src="{{ url_for('static', filename='icons/edit.png') }}" onclick="editFolderPrompt('{{ folder }}')" class="edit-folder-icon" alt="Edit">
-                                <img src="{{ url_for('static', filename='icons/delete.png') }}" onclick="deleteFolder('{{ folder }}')" class="delete-icon" alt="Delete">
+                                <img src="{{ url_for('static', filename='icons/add-file.png') }}" 
+                                onclick="addPDF('{{ folder }}')" class="add-pdf-icon" alt="Add PDF">
+                                <img src="{{ url_for('static', filename='icons/edit.png') }}" 
+                                onclick="editFolderPrompt('{{ folder }}')" class="edit-folder-icon" alt="Edit">
+                                <img src="{{ url_for('static', filename='icons/delete.png') }}" 
+                                onclick="deleteFolder('{{ folder }}')" class="delete-icon" alt="Delete">
                             {% endif %}
                         </span>
                     </div>
@@ -60,7 +64,8 @@
                             <li class="pdf-item">
                                 <a href="#" onclick="loadPDF('{{ folder }}/{{ pdf }}'); return false;">{{ pdf }}</a>
                                 {% if current_user.role_id == 1 %}
-                                    <img src="{{ url_for('static', filename='icons/delete.png') }}" onclick="deletePDF('{{ folder }}', '{{ pdf }}')" class="delete-pdf-icon" alt="Delete">
+                                    <img src="{{ url_for('static', filename='icons/delete.png') }}" 
+                                    onclick="deletePDF('{{ folder }}', '{{ pdf }}')" class="delete-pdf-icon" alt="Delete">
                                 {% endif %}
                             </li>
                         {% endfor %}
@@ -177,7 +182,7 @@
             pdfFileInput.click();
         }
 
-        function editFolderPrompt(folderName, deptName) {
+        function editFolderPrompt(folderName) {
             const newFolderName = prompt("Enter the new name for the folder:", folderName);
             if (newFolderName && newFolderName !== folderName) {
                 fetch('/edit_folder', {
@@ -185,7 +190,7 @@
                     headers: {
                         "Content-Type": "application/json"
                     },
-                    body: JSON.stringify({ oldFolderName: folderName, newFolderName: newFolderName, deptName })
+                    body: JSON.stringify({ oldFolderName: folderName, newFolderName: newFolderName })
                 })
                 .then(response => response.json())
                 .then(data => {
@@ -199,24 +204,22 @@
             }
         }
 
-        function deleteFolder(folderName, deptName) {
+        function deleteFolder(folderName) {
             if (confirm(`Are you sure you want to delete folder "${folderName}"? This action cannot be undone.`)) {
-                if (deptName) {
-                    fetch('/delete_folder', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ folderName, deptName })
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            alert("Folder deleted successfully!");
-                            location.reload();
-                        } else {
-                            alert(data.error);
-                        }
-                    });
-                }
+                fetch('/delete_folder', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ folderName: folderName })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert("Folder deleted successfully!");
+                        location.reload();
+                    } else {
+                        alert(data.error);
+                    }
+                });
             }
         }
 
