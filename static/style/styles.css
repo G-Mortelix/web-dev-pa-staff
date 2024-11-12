@@ -4,7 +4,7 @@
 * {
     margin: 0;
     padding: 0;
-    box-sizing: border-box;
+    /* box-sizing: border-box; */
     font-family: Georgia, 'Times New Roman', Times, serif;
 }
 
@@ -27,7 +27,7 @@ header {
 
 /* Logo section */
 .header-logo {
-    flex: 1;
+    flex: 0.7;
 }
 
 .header-logo .logo {
@@ -107,14 +107,21 @@ header {
 .sidebar h2 {
     font-size: 1.2rem;
     margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 
 .sidebar ul {
     list-style-type: none;
-    margin-bottom: 20px;
+    margin-bottom: 5px;
+    margin-left: 1.8rem;
 }
 
 .sidebar li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     margin: 8px 0;
 }
 
@@ -125,6 +132,66 @@ header {
 
 .sidebar a:hover {
     text-decoration: underline;
+}
+
+.department-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.department-heading {
+    font-size: 1.3rem;
+    font-weight: bold;
+    color: #333;
+    margin-top: 10px;
+    margin-bottom: 15px;
+}
+
+.dept-icons .add-folder-icon {
+    width: 18px;
+    cursor: pointer;
+}
+
+.folder-container {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.folder-icon img {
+    width: 18px;
+    margin-right: 10px;
+}
+
+.folder-name {
+    flex-grow: 1;
+    overflow-wrap: break-word;
+}
+
+.folder-icons .add-pdf-icon, .folder-icons .edit-folder-icon, .folder-icons .delete-icon {
+    width: 12px;
+    margin-left: 5px;
+    cursor: pointer;
+}
+
+.pdf-item {
+    overflow-wrap: break-word;
+    margin-bottom: 5px;
+}
+
+.pdf-item a {
+    overflow-wrap: break-word;
+    word-wrap: break-word;
+    white-space: normal; /* Allow line breaks within the word */
+    width: 80%; /* Control width to keep text inside the bounds */
+    font-size: 0.8rem;
+}
+
+.pdf-item .delete-pdf-icon {
+    margin-left: auto; /* Aligns icon to the far right */
+    width: 10px;
+    cursor: pointer;
 }
 
 .management-controls {

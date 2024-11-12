@@ -15,11 +15,11 @@
         </div>
         <div class="header-title">
             <h1>Library</h1>
-            <p class="confidential-message">Confidential notice: The information on this website, 
-                including any documents, is confidential and legally privileged, intended solely for 
-                use by the designated individual or entity. Unauthorized access, disclosure, or distribution 
-                of this information is strictly prohibited. Any unintended access should cease immediately, 
-                and the administrator should be notified.</p>
+            <p class="confidential-message">Confidential Notice:  
+                The content and documents on this website are confidential and legally privileged, 
+                intended exclusively for the designated individual or entity. Unauthorized access, 
+                disclosure, or distribution is strictly prohibited. If you have accessed this information 
+                unintentionally, please stop immediately and notify the administrator.</p>
         </div>
         <div class="header-buttons">
             {% if current_user.role_id == 1 %}
@@ -31,48 +31,43 @@
     
     <div class="container">
         <aside class="sidebar">
-            {% if current_user.role_id == 1 %}
-                <div class="management-controls">
-                    <button onclick="addFolder()">Add Folder</button>
-                    <button onclick="showUploadForm()">Add PDF</button>
-                </div>
-            {% endif %}
-
-            {% for folder, pdffile in pdf_structure.items() %}
-                <h2>
-                    {{ folder }}
+            {% for department, folders in pdf_structure.items() %}
+                <div class="department-container">
+                    <h2 class="department-heading">{{ department }}</h2>
                     {% if current_user.role_id == 1 %}
-                        <button onclick="deleteFolder('{{ folder }}')">🗑️</button>
+                        <span class="dept-icons">
+                            <img src="{{ url_for('static', filename='icons/add-folder.png') }}" onclick="addFolder('{{ department }}')" class="add-folder-icon" alt="Add Folder">
+                        </span>
                     {% endif %}
-                </h2>
-                <ul>
-                    {% for pdf in pdffile %}
-                        <li>
-                            <a href="#" onclick="loadPDF('{{ folder }}/{{ pdf }}'); return false;">{{ pdf }}</a>
+                </div>
+    
+                {% for folder, pdffiles in folders.items() %}
+                    <div class="folder-container">
+                        <span class="folder-icon">
+                            <img src="{{ url_for('static', filename='icons/folder.png') }}" alt="Folder Icon">
+                        </span>
+                        <span class="folder-name">{{ folder }}</span>
+                        <span class="folder-icons">
                             {% if current_user.role_id == 1 %}
-                                <button onclick="deletePDF('{{ folder }}', '{{ pdf }}')" class="delete-pdf-btn">🗑️</button>
+                                <img src="{{ url_for('static', filename='icons/add-file.png') }}" onclick="addPDF('{{ folder }}')" class="add-pdf-icon" alt="Add PDF">
+                                <img src="{{ url_for('static', filename='icons/edit.png') }}" onclick="editFolderPrompt('{{ folder }}')" class="edit-folder-icon" alt="Edit">
+                                <img src="{{ url_for('static', filename='icons/delete.png') }}" onclick="deleteFolder('{{ folder }}')" class="delete-icon" alt="Delete">
                             {% endif %}
-                        </li>
-                    {% endfor %}
-                </ul>
+                        </span>
+                    </div>
+                    <ul>
+                        {% for pdf in pdffiles %}
+                            <li class="pdf-item">
+                                <a href="#" onclick="loadPDF('{{ folder }}/{{ pdf }}'); return false;">{{ pdf }}</a>
+                                {% if current_user.role_id == 1 %}
+                                    <img src="{{ url_for('static', filename='icons/delete.png') }}" onclick="deletePDF('{{ folder }}', '{{ pdf }}')" class="delete-pdf-icon" alt="Delete">
+                                {% endif %}
+                            </li>
+                        {% endfor %}
+                    </ul>
+                {% endfor %}
             {% endfor %}
         </aside>
-
-        <div id="upload-pdf-form" style="display: none;">
-            <h3>Upload a PDF</h3>
-            <form id="pdfUploadForm" enctype="multipart/form-data">
-                <label for="folderSelect">Select Folder:</label>
-                <select id="folderSelect" name="folder">
-                    {% for folder in pdf_structure.keys() %}
-                        <option value="{{ folder }}">{{ folder }}</option>
-                    {% endfor %}
-                </select>
-                <label for="pdfFile">Choose PDF:</label>
-                <input type="file" id="pdfFile" name="pdfFile" accept=".pdf" required>
-                <button type="button" onclick="uploadPDF()">Upload PDF</button>
-                <button type="button" onclick="hideUploadForm()">Cancel</button>
-            </form>
-        </div>
 
         <main class="pdf-viewer-container">
             <div id="welcome-message">
@@ -82,6 +77,7 @@
             <div id="pdf-viewer"></div>
         </main>
     </div>
+
 
     <script>
         // Function to load and render a PDF
@@ -114,21 +110,22 @@
             });
         }
 
-        function performAction(action) {
+        function performAction(action, folderName = null, pdfName = null) {
             if (action === 'addFolder') {
-                addFolder();
+                addFolder(deptName);
             } else if (action === 'addPDF') {
-                uploadPDF();
+                addPDF(folderName);
+            } else if (action === 'editFolder') {
+                editFolderPrompt(folderName);
             } else if (action === 'deleteFolder') {
-                deleteFolder();
+                deleteFolder(folderName);
             } else if (action === 'deletePDF') {
-                deletePDF();
+                deletePDF(folderName, pdfName);
             }
         }
-    
-        function addFolder() {
+
+        function addFolder(deptName) {
             const folderName = prompt("Enter the name of the new folder:");
-            const deptName = prompt("Enter the department name for the new folder:");
 
             if (folderName && deptName) {
                 fetch('/add_folder', {
@@ -150,17 +147,65 @@
                 alert("Folder name and department name are required.");
             }
         }
-    
-        function deleteFolder(folderName) {
 
+        function addPDF(folderName) {
+            const pdfFileInput = document.createElement("input");
+            pdfFileInput.type = "file";
+            pdfFileInput.accept = ".pdf";
+            pdfFileInput.onchange = () => {
+                const file = pdfFileInput.files[0];
+                if (file) {
+                    const formData = new FormData();
+                    formData.append("pdfFile", file);
+                    formData.append("folder", folderName);
+
+                    fetch('/upload_pdf', {
+                        method: 'POST',
+                        body: formData
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            alert("PDF uploaded successfully!");
+                            location.reload();  // Reload the page to show the new PDF
+                        } else {
+                            alert("Error: " + data.error);
+                        }
+                    });
+                }
+            };
+            pdfFileInput.click();
+        }
+
+        function editFolderPrompt(folderName, deptName) {
+            const newFolderName = prompt("Enter the new name for the folder:", folderName);
+            if (newFolderName && newFolderName !== folderName) {
+                fetch('/edit_folder', {
+                    method: 'POST',
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({ oldFolderName: folderName, newFolderName: newFolderName, deptName })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert("Folder name updated successfully.");
+                        location.reload();
+                    } else {
+                        alert("Error: " + data.error);
+                    }
+                });
+            }
+        }
+
+        function deleteFolder(folderName, deptName) {
             if (confirm(`Are you sure you want to delete folder "${folderName}"? This action cannot be undone.`)) {
-                const deptName = prompt("Enter the department name of the folder:");
-
                 if (deptName) {
                     fetch('/delete_folder', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ folderName: folderName, deptName: deptName })
+                        body: JSON.stringify({ folderName, deptName })
                     })
                     .then(response => response.json())
                     .then(data => {
@@ -172,17 +217,15 @@
                         }
                     });
                 }
-            } else {
-                console.log("PDF deletion is cancelled.");
             }
         }
-    
+
         function deletePDF(folderName, pdfName) {
             if (confirm(`Are you sure you want to delete the PDF "${pdfName}" from folder "${folderName}"? This action cannot be undone.`)) {
                 fetch('/delete_pdf', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ folderName: folderName, pdfName: pdfName })
+                    body: JSON.stringify({ folderName, pdfName })
                 })
                 .then(response => response.json())
                 .then(data => {
@@ -196,35 +239,6 @@
             }
         }
 
-        // Show the upload form
-        function showUploadForm() {
-            document.getElementById('upload-pdf-form').style.display = 'block';
-        }
-    
-        // Hide the upload form
-        function hideUploadForm() {
-            document.getElementById('upload-pdf-form').style.display = 'none';
-        }
-    
-        // Upload PDF function
-        function uploadPDF() {
-            
-            const formData = new FormData(document.getElementById('pdfUploadForm'));
-            
-            fetch('/upload_pdf', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    alert("PDF uploaded successfully!");
-                    location.reload();  // Reload the page to show the new PDF
-                } else {
-                    alert("Error: " + data.error);
-                }
-            });
-        }
     </script>
 </body>
 </html>

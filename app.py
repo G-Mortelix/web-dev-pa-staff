@@ -1,5 +1,6 @@
 import os, re, shutil
 from functools import wraps
+from sqlalchemy import case
 from dotenv import load_dotenv
 from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
@@ -106,21 +107,24 @@ def login():
 @app.route('/home')
 @login_required
 def home():
-    # Dictionary to hold folders and their PDFs
     pdf_structure = {}
 
     if current_user.role_id == 1:  # Admin can view all folders
-        folders = Folder.query.all()
-    else:
-        folders = Folder.query.filter(
-            (Folder.dept_id == current_user.dept_id) | (Folder.dept_id == 4)  # 4 is General
+        departments = Department.query.order_by(
+            case((Department.dept_name == "General", 0), else_=1)
         ).all()
-    
-    # Iterate through folders and files in the PDFs directory
-    for folder in folders:
-        pdfs = PDF.query.filter_by(folder_id = folder.folder_id).all()
-        pdf_files = [pdf.pdf_name for pdf in pdfs]
-        pdf_structure[folder.folder_name] = pdf_files
+    else:
+        departments = Department.query.filter(
+            (Department.dept_id == current_user.dept_id) | (Department.dept_id == 4)
+        ).order_by(case((Department.dept_name == "General", 0), else_=1)).all()
+
+    for department in departments:
+        folders = Folder.query.filter_by(dept_id=department.dept_id).all()
+        pdf_structure[department.dept_name] = {}
+        for folder in folders:
+            pdfs = PDF.query.filter_by(folder_id=folder.folder_id).all()
+            pdf_files = [pdf.pdf_name for pdf in pdfs]
+            pdf_structure[department.dept_name][folder.folder_name] = pdf_files
 
     return render_template('index.html', pdf_structure=pdf_structure)
 
@@ -140,25 +144,20 @@ def add_folder():
     folder_name = data.get('folderName', '').strip()  # Preserve case and spaces
     dept_name = data.get('deptName', '').strip()
 
-    # Ensure the folder name and department name are not empty
     if not folder_name or not dept_name:
         return jsonify(success=False, error="Folder name and department name cannot be empty.")
 
-    # Check if the department exists
     department = Department.query.filter_by(dept_name=dept_name).first()
     if not department:
         return jsonify(success=False, error="Department not found.")
 
-    # Check for an existing folder with the exact name and department (case-sensitive)
     existing_folder = Folder.query.filter_by(folder_name=folder_name, dept_id=department.dept_id).first()
     if existing_folder:
         return jsonify(success=False, error="Folder with the same name already exists in this department.")
 
-    # Create the new folder entry
     new_folder = Folder(folder_name=folder_name, dept_id=department.dept_id)
     db.session.add(new_folder)
     db.session.commit()
-
     return jsonify(success=True)
 
 def sanitize_folder_name(name):
@@ -167,13 +166,45 @@ def sanitize_folder_name(name):
     sanitized_name = sanitized_name.strip()  # Remove leading and trailing whitespace
     return sanitized_name
 
+@app.route('/edit_folder', methods=['POST'])
+@login_required
+def edit_folder():
+    if current_user.role_id != 1:
+        return jsonify(success=False, error="You do not have permission to edit folders.")
+    
+    data = request.get_json()
+    old_folder_name = data.get('oldFolderName', '').strip()
+    new_folder_name = data.get('newFolderName', '').strip()
+    dept_name = data.get('deptName', '').strip()
+
+    # Check if the department exists
+    department = Department.query.filter_by(dept_name=dept_name).first()
+    if not department:
+        return jsonify(success=False, error="Department not found.")
+
+    # Locate the folder with the old name
+    folder = Folder.query.filter_by(folder_name=old_folder_name, dept_id=department.dept_id).first()
+    if not folder:
+        return jsonify(success=False, error="Folder not found.")
+
+    # Check if a folder with the new name already exists
+    existing_folder = Folder.query.filter_by(folder_name=new_folder_name, dept_id=department.dept_id).first()
+    if existing_folder:
+        return jsonify(success=False, error="A folder with this name already exists.")
+
+    # Update the folder name in the database
+    folder.folder_name = new_folder_name
+    db.session.commit()
+
+    return jsonify(success=True)
+
+
 @app.route('/upload_pdf', methods=['POST'])
 @login_required
 def upload_pdf():
     if current_user.role_id != 1:
         return jsonify(success=False, error="You do not have permission to upload PDFs.")
     
-    # Check if a file is uploaded
     if 'pdfFile' not in request.files:
         return jsonify(success=False, error="No file part in the request.")
     
@@ -183,14 +214,12 @@ def upload_pdf():
 
     sanitized_folder_name = sanitize_folder_name(folder_name)
 
-    # Validate that a folder was selected and file is a PDF
     if not folder_name or file.filename == '':
         return jsonify(success=False, error="Folder or file not specified.")
     
     if not file.filename.lower().endswith('.pdf'):
         return jsonify(success=False, error="Only PDF files are allowed.")
 
-    # Secure the filename and set the path to save the file
     folder = Folder.query.filter_by(folder_name=folder_name).first()
     if not folder:
         return jsonify(success=False, error="Folder not found.")
@@ -200,11 +229,9 @@ def upload_pdf():
     file_path = os.path.join(folder_path, filename)
     file.save(file_path)
 
-    # Create a new PDF entry
     new_pdf = PDF(folder_id=folder.folder_id, pdf_name=filename, pdf_path=file_path)
     db.session.add(new_pdf)
     db.session.commit()
-
     return jsonify(success=True)
 
 @app.route('/delete_folder', methods=['POST'])
@@ -217,29 +244,25 @@ def delete_folder():
     folder_name = data.get('folderName', '').strip()
     dept_name = data.get('deptName', '').strip()
 
-    # Check if the department exists
     department = Department.query.filter_by(dept_name=dept_name).first()
     if not department:
         return jsonify(success=False, error="Department not found.")
 
-    # Locate the folder with exact case sensitivity in the specified department
     folder = Folder.query.filter_by(folder_name=folder_name, dept_id=department.dept_id).first()
     if not folder:
         return jsonify(success=False, error="Folder not found.")
 
-    # Remove folder from database
     db.session.delete(folder)
     db.session.commit()
 
-    # Define folder path for deletion from disk
     folder_path = os.path.join(app.static_folder, 'pdffile', folder_name)
     try:
         if os.path.exists(folder_path):
-            shutil.rmtree(folder_path)  # Delete the folder and all contents
+            shutil.rmtree(folder_path)
         return jsonify(success=True)
     except Exception as e:
         return jsonify(success=False, error=str(e))
-
+    
 @app.route('/delete_pdf', methods=['POST'])
 @login_required
 def delete_pdf():
