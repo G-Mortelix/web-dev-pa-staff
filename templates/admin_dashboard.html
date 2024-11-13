@@ -4,121 +4,145 @@
     <title>Admin Dashboard</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style/styles.css') }}">
 </head>
-<body>
-    <h1>Admin Dashboard</h1>
-    <p>Welcome, Super Admin!</p>
+<body class="admin-dashboard">
+    <header class="dashboard-header">
+        <h1>Admin Dashboard</h1>
+    </header>
 
-    <!-- Flash messages -->
-    {% with messages = get_flashed_messages() %}
-        {% if messages %}
-            <div class="flash-messages">
-                {% for message in messages %}
-                    <p>{{ message }}</p>
+    <div class="dashboard-tabs">
+        <a href="javascript:void(0)" onclick="toggleSection('registerSection')">Register User</a>
+        <a href="javascript:void(0)" onclick="toggleSection('managePermissionsSection')">Manage Permissions</a>
+        <a href="javascript:void(0)" onclick="toggleSection('manageDepartmentSection')">Manage Department</a>
+        <a href="javascript:void(0)" onclick="toggleSection('manageUsersSection')">Manage Users</a>
+    </div>
+
+    <div class="dashboard-content">
+        <a href="{{ url_for('home') }}" class="back-link">Back to Home</a>
+
+        <!-- Register New User Section -->
+        <div id="registerSection" class="admin-section">
+            <h2>Register a New User</h2>
+            <form method="POST" action="{{ url_for('register_user') }}">
+                <label for="username">Username:</label>
+                <input type="text" id="username" name="username" required>
+
+                <label for="password">Password:</label>
+                <input type="password" id="password" name="password" required>
+
+                <label for="role">Role:</label>
+                <select id="role" name="role_id">
+                    {% for role in roles %}
+                        <option value="{{ role.role_id }}">{{ role.role_name }}</option>
+                    {% endfor %}
+                </select>
+
+                <label for="department">Department:</label>
+                <select id="department" name="dept_id">
+                    {% for department in departments %}
+                        <option value="{{ department.dept_id }}">{{ department.dept_name }}</option>
+                    {% endfor %}
+                </select>
+
+                <button type="submit" class="form-submit">Register</button>
+            </form>
+        </div>
+
+        <!-- Manage Permissions Section -->
+        <div id="managePermissionsSection" class="admin-section">
+            <h2>Manage Permissions</h2>
+            <table class="permissions-table">
+                <tr>
+                    <th>Role</th>
+                    <th>Folder</th>
+                    <th>Read</th>
+                    <th>Write</th>
+                    <th>Delete</th>
+                    <th>Actions</th>
+                </tr>
+                {% for permission in permissions %}
+                    <tr>
+                        <td>{{ permission.role.role_name }}</td>
+                        <td>{{ permission.folder.folder_name }}</td>
+                        <td>{{ 'Yes' if permission.read_permission else 'No' }}</td>
+                        <td>{{ 'Yes' if permission.write_permission else 'No' }}</td>
+                        <td>{{ 'Yes' if permission.delete_permission else 'No' }}</td>
+                        <td><button onclick="editPermission({{ permission.permission_id }})">Edit</button></td>
+                    </tr>
                 {% endfor %}
+            </table>
+        </div>
+
+        <!-- Manage Department Section -->
+        <div id="manageDepartmentSection" class="admin-section" style="display: none;">
+            <h2>Manage Department</h2>
+        
+            <!-- Initial buttons to choose between Add or Delete Department -->
+            <div id="manageDeptOptions">
+                <button onclick="showAddDeptForm()">Add Department</button>
+                <button onclick="showDeleteDeptForm()">Delete Department</button>
             </div>
-        {% endif %}
-    {% endwith %}
+        
+            <!-- Add Department Form -->
+            <div id="addDeptForm" style="display: none;">
+                <h3>Add Department</h3>
+                <form method="POST" action="{{ url_for('add_department') }}">
+                    <label for="dept_name">Department Name:</label>
+                    <input type="text" id="dept_name" name="dept_name" required>
+                    <button type="submit" class="form-submit">Add Department</button>
+                    <button type="button" onclick="resetManageDept()">Back</button>
+                </form>
+            </div>
+        
+            <!-- Delete Department Form -->
+            <div id="deleteDeptForm" style="display: none;">
+                <h3>Delete Department</h3>
+                <form method="POST" action="{{ url_for('delete_department') }}">
+                    <label for="delete_dept_name">Select Department:</label>
+                    <select id="delete_dept_name" name="dept_name" required>
+                        {% for department in departments %}
+                            <option value="{{ department.dept_name }}">{{ department.dept_name }}</option>
+                        {% endfor %}
+                    </select>
+                    <button type="submit" class="form-submit delete">Delete Department</button>
+                    <button type="button" onclick="resetManageDept()">Back</button>
+                </form>
+            </div>
+        </div>
 
-    <div class="admin-actions">
-        <button onclick="toggleSection('registerSection')">Register New User</button>
-        <button onclick="toggleSection('managePermissionsSection')">Manage Permissions</button>
-        <button onclick="toggleSection('addDepartmentSection')">Add New Department</button>
-        <button onclick="toggleSection('manageUsersSection')">Manage Users</button>
-    </div>
-
-    <!-- Register New User Section -->
-    <div id="registerSection" class="admin-section" style="display: none;">
-        <h2>Register a New User</h2>
-        <form method="POST" action="{{ url_for('register_user') }}">
-            <label for="username">Username:</label>
-            <input type="text" id="username" name="username" required>
-
-            <label for="password">Password:</label>
-            <input type="password" id="password" name="password" required>
-
-            <label for="role">Role:</label>
-            <select id="role" name="role_id">
-                {% for role in roles %}
-                    <option value="{{ role.role_id }}">{{ role.role_name }}</option>
-                {% endfor %}
-            </select>
-
-            <label for="department">Department:</label>
-            <select id="department" name="dept_id">
-                {% for department in departments %}
-                    <option value="{{ department.dept_id }}">{{ department.dept_name }}</option>
-                {% endfor %}
-            </select>
-
-            <button type="submit">Register</button>
-        </form>
-    </div>
-
-    <!-- Manage Permissions Section -->
-    <div id="managePermissionsSection" class="admin-section" style="display: none;">
-        <h2>Manage Permissions</h2>
-        <table>
-            <tr>
-                <th>Role</th>
-                <th>Folder</th>
-                <th>Read</th>
-                <th>Write</th>
-                <th>Delete</th>
-                <th>Actions</th>
-            </tr>
-            {% for permission in permissions %}
+        <!-- Manage Users Section -->
+        <div id="manageUsersSection" class="admin-section">
+            <h2>Manage Users</h2>
+            <table class="users-table">
                 <tr>
-                    <td>{{ permission.role.role_name }}</td>
-                    <td>{{ permission.folder.folder_name }}</td>
-                    <td>{{ 'Yes' if permission.read_permission else 'No' }}</td>
-                    <td>{{ 'Yes' if permission.write_permission else 'No' }}</td>
-                    <td>{{ 'Yes' if permission.delete_permission else 'No' }}</td>
-                    <td><button onclick="editPermission({{ permission.permission_id }})">Edit</button></td>
+                    <th>Username</th>
+                    <th>Role</th>
+                    <th>Department</th>
+                    <th>Actions</th>
                 </tr>
-            {% endfor %}
-        </table>
+                {% for user in users %}
+                    <tr>
+                        <td>{{ user.username }}</td>
+                        <td>{{ user.role.role_name }}</td>
+                        <td>{{ user.department.dept_name }}</td>
+                        <td><button onclick="deleteUser('{{ user.user_id }}')">Delete</button></td>
+                    </tr>
+                {% endfor %}
+            </table>
+        </div>
     </div>
-
-    <!-- Add New Department Section -->
-    <div id="addDepartmentSection" class="admin-section" style="display: none;">
-        <h2>Add New Department</h2>
-        <form method="POST" action="{{ url_for('add_department') }}">
-            <label for="dept_name">Department Name:</label>
-            <input type="text" id="dept_name" name="dept_name" required>
-            <button type="submit">Add Department</button>
-        </form>
-    </div>
-
-    <!-- Manage Users Section -->
-    <div id="manageUsersSection" class="admin-section" style="display: none;">
-        <h2>Manage Users</h2>
-        <table>
-            <tr>
-                <th>Username</th>
-                <th>Role</th>
-                <th>Department</th>
-                <th>Actions</th>
-            </tr>
-            {% for user in users %}
-                <tr>
-                    <td>{{ user.username }}</td>
-                    <td>{{ user.role.role_name }}</td>
-                    <td>{{ user.department.dept_name }}</td>
-                    <td>
-                        <button onclick="deleteUser('{{ user.user_id }}')">Delete</button>
-                    </td>
-                </tr>
-            {% endfor %}
-        </table>
-    </div>
-
-    <p><a href="{{ url_for('home') }}">Back to Home</a></p>
 
     <script>
         function toggleSection(sectionId) {
-            const section = document.getElementById(sectionId);
-            section.style.display = section.style.display === 'none' ? 'block' : 'none';
+            document.querySelectorAll('.admin-section').forEach(section => {
+                section.style.display = 'none';
+            });
+            document.getElementById(sectionId).style.display = 'block';
         }
+
+        // Display the register section by default on page load
+        document.addEventListener("DOMContentLoaded", function() {
+            toggleSection('registerSection');
+        });
 
         function deleteUser(userId) {
             if (confirm("Are you sure you want to delete this user?")) {
@@ -136,6 +160,24 @@
                 });
             }
         }
+
+        function showAddDeptForm() {
+        document.getElementById('manageDeptOptions').style.display = 'none';
+        document.getElementById('addDeptForm').style.display = 'block';
+        document.getElementById('deleteDeptForm').style.display = 'none';
+    }
+
+    function showDeleteDeptForm() {
+        document.getElementById('manageDeptOptions').style.display = 'none';
+        document.getElementById('deleteDeptForm').style.display = 'block';
+        document.getElementById('addDeptForm').style.display = 'none';
+    }
+
+    function resetManageDept() {
+        document.getElementById('manageDeptOptions').style.display = 'block';
+        document.getElementById('addDeptForm').style.display = 'none';
+        document.getElementById('deleteDeptForm').style.display = 'none';
+    }
     </script>
 </body>
 </html>

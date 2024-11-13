@@ -324,6 +324,26 @@ def add_department():
     flash('Department added successfully!')
     return redirect(url_for('admin_dashboard'))
 
+@app.route('/delete_department', methods=['POST'])
+@login_required
+@super_admin_required
+def delete_department():
+    dept_name = request.form['dept_name'].strip()
+    if not dept_name:
+        flash('Please select a department to delete.')
+        return redirect(url_for('admin_dashboard'))
+
+    department = Department.query.filter_by(dept_name=dept_name).first()
+    if not department:
+        flash('Department not found.')
+        return redirect(url_for('admin_dashboard'))
+
+    db.session.delete(department)
+    db.session.commit()
+    flash('Department deleted successfully!')
+    return redirect(url_for('admin_dashboard'))
+
+
 @app.route('/register', methods=['GET', 'POST'], endpoint='register_user')
 @super_admin_required
 @login_required
