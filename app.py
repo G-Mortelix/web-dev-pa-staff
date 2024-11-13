@@ -1,9 +1,10 @@
 import os, re, shutil
 from functools import wraps
-from sqlalchemy import case
 from dotenv import load_dotenv
 from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import case, ForeignKey
+from sqlalchemy.orm import relationship
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask import Flask, render_template, redirect, url_for, request, flash, jsonify, session, abort
@@ -53,6 +54,8 @@ class Department(db.Model):
     dept_id = db.Column(db.Integer, primary_key=True)
     dept_name = db.Column(db.String(50), unique=True, nullable=False)
 
+    permissions = db.relationship("Permission", back_populates="department")
+
 class Folder(db.Model):
     __tablename__ = 'folders'
     folder_id = db.Column(db.Integer, primary_key=True)
@@ -71,11 +74,15 @@ class PDF(db.Model):
 class Permission(db.Model):
     __tablename__ = 'permissions'
     permission_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    role_id = db.Column(db.Integer, db.ForeignKey('roles.role_id'))
-    folder_id = db.Column(db.Integer, db.ForeignKey('folders.folder_id'))
+    role_id = db.Column(db.Integer, db.ForeignKey('roles.role_id'), nullable=False)
+    dept_id = db.Column(db.Integer, db.ForeignKey('departments.dept_id'), nullable=False)
     read_permission = db.Column(db.Boolean, default=True)
     write_permission = db.Column(db.Boolean, default=False)
     delete_permission = db.Column(db.Boolean, default=False)
+
+    # Define the relationships
+    role = db.relationship("Role", backref="permissions")
+    department = db.relationship("Department", back_populates="permissions", foreign_keys=[dept_id])
 
 def super_admin_required(f):
     @wraps(f)
@@ -387,6 +394,27 @@ def delete_user(user_id):
     db.session.delete(user)
     db.session.commit()
     return jsonify(success=True)
+
+@app.route('/update_permission', methods=['POST'])
+@login_required
+@super_admin_required
+def update_permission():
+    data = request.get_json()
+    permission_id = data.get('permission_id')
+    read_permission = data.get('read_permission')
+    write_permission = data.get('write_permission')
+    delete_permission = data.get('delete_permission')
+
+    permission = Permission.query.get(permission_id)
+    if permission:
+        permission.read_permission = read_permission
+        permission.write_permission = write_permission
+        permission.delete_permission = delete_permission
+        db.session.commit()
+        return jsonify(success=True)
+    else:
+        return jsonify(success=False, error="Permission not found")
+
 
 @app.route('/logout')
 @login_required
