@@ -38,7 +38,7 @@ class User(db.Model, UserMixin):
     role_id = db.Column(db.Integer, db.ForeignKey('roles.role_id'))
     dept_id = db.Column(db.Integer, db.ForeignKey('departments.dept_id'))
 
-    role = db.relationship('Role', backref='users')  # Add this line to create a relationship to Role
+    role = db.relationship('Role', backref='users')
     department = db.relationship('Department', backref='users')
 
     def get_id(self):
@@ -273,7 +273,6 @@ def delete_folder():
         return jsonify(success=True)
     except Exception as e:
         return jsonify(success=False, error=str(e))
-
     
 @app.route('/delete_pdf', methods=['POST'])
 @login_required
@@ -349,7 +348,6 @@ def delete_department():
     db.session.commit()
     flash('Department deleted successfully!')
     return redirect(url_for('admin_dashboard'))
-
 
 @app.route('/register', methods=['GET', 'POST'], endpoint='register_user')
 @super_admin_required
