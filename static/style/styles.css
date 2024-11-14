@@ -89,7 +89,7 @@ header {
     padding: 10px 20px;
     align-items: center;
     background-color: #ffffff;
-    border-bottom: 2px solid #ccc;
+    border-bottom: 2.5px solid #ccc;
 }
 
 /* header logo position */
@@ -106,6 +106,7 @@ header {
 /* header title position */
 .header-title {
     flex: 2;
+    text-align: justify;
 }
 
 /* header title size */
@@ -305,7 +306,7 @@ header {
 .pdf-viewer-container {
     flex: 1;
     overflow-y: auto;
-    background-color: rgb(255, 253, 240);
+    background-color: #ffffff;
 }
 
 /* pdf viewer item size */

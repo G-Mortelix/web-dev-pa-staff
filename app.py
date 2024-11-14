@@ -36,7 +36,7 @@ class User(db.Model, UserMixin):
     username = db.Column(db.String(50), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
     role_id = db.Column(db.Integer, db.ForeignKey('roles.role_id'))
-    dept_id = db.Column(db.Integer, db.ForeignKey('departments.dept_id'))
+    dept_id = db.Column(db.Integer, db.ForeignKey('departments.dept_id'), nullable=True)
 
     role = db.relationship('Role', backref='users')
     department = db.relationship('Department', backref='users')
@@ -161,7 +161,7 @@ def add_folder():
         return jsonify(success=False, error="You do not have permission to add folders.")
 
     data = request.get_json()
-    folder_name = data.get('folderName', '').strip()  # Preserve case and spaces
+    folder_name = data.get('folderName', '').strip()
     dept_name = data.get('deptName', '').strip()
 
     if not folder_name or not dept_name:
@@ -175,10 +175,19 @@ def add_folder():
     if existing_folder:
         return jsonify(success=False, error="Folder with the same name already exists in this department.")
 
+    # Create a new folder entry in the database
     new_folder = Folder(folder_name=folder_name, dept_id=department.dept_id)
     db.session.add(new_folder)
     db.session.commit()
+
+    # Create the actual folder on the file system
+    sanitized_folder_name = sanitize_folder_name(folder_name)
+    sanitized_dept_name = sanitize_folder_name(dept_name)
+    folder_path = os.path.join(app.static_folder, 'pdffile', sanitized_dept_name, sanitized_folder_name)
+    os.makedirs(folder_path, exist_ok=True)
+
     return jsonify(success=True)
+
 
 def sanitize_folder_name(name):
     # Replace any character that is not alphanumeric, space, hyphen, or underscore
@@ -225,23 +234,22 @@ def upload_pdf():
     folder_name = request.form.get('folder').strip()
     filename = secure_filename(file.filename.strip())
 
-    sanitized_folder_name = sanitize_folder_name(folder_name)
-
-    if not folder_name or file.filename == '':
-        return jsonify(success=False, error="Folder or file not specified.")
-    
-    if not file.filename.lower().endswith('.pdf'):
-        return jsonify(success=False, error="Only PDF files are allowed.")
-
+    # Sanitize and create folder structure path
     folder = Folder.query.filter_by(folder_name=folder_name).first()
     if not folder:
         return jsonify(success=False, error="Folder not found.")
     
-    folder_path = os.path.join(app.static_folder, 'pdffile', sanitized_folder_name)
-    os.makedirs(folder_path, exist_ok=True)
+    department = Department.query.get(folder.dept_id)
+    sanitized_folder_name = sanitize_folder_name(folder_name)
+    sanitized_dept_name = sanitize_folder_name(department.dept_name)
+    folder_path = os.path.join(app.static_folder, 'pdffile', sanitized_dept_name, sanitized_folder_name)
+    
+    os.makedirs(folder_path, exist_ok=True)  # Ensure folder exists
+    
     file_path = os.path.join(folder_path, filename)
     file.save(file_path)
 
+    # Store file info in database
     new_pdf = PDF(folder_id=folder.folder_id, pdf_name=filename, pdf_path=file_path)
     db.session.add(new_pdf)
     db.session.commit()
@@ -261,12 +269,17 @@ def delete_folder():
     if not folder:
         return jsonify(success=False, error="Folder not found.")
 
+    department = Department.query.get(folder.dept_id)
+    sanitized_folder_name = sanitize_folder_name(folder_name)
+    sanitized_dept_name = sanitize_folder_name(department.dept_name)
+
+    # Define folder path for deletion from disk
+    folder_path = os.path.join(app.static_folder, 'pdffile', sanitized_dept_name, sanitized_folder_name)
+    
     # Remove folder from database
     db.session.delete(folder)
     db.session.commit()
 
-    # Define folder path for deletion from disk
-    folder_path = os.path.join(app.static_folder, 'pdffile', folder_name)
     try:
         if os.path.exists(folder_path):
             shutil.rmtree(folder_path)  # Delete the folder and all contents
@@ -284,6 +297,7 @@ def delete_pdf():
     folder_name = data.get('folderName').strip()
     pdf_name = data.get('pdfName').strip()
 
+    # Retrieve the PDF and folder details
     pdf = PDF.query.join(Folder).filter(
         Folder.folder_name == folder_name,
         PDF.pdf_name == pdf_name
@@ -292,17 +306,17 @@ def delete_pdf():
     if not pdf:
         return jsonify(success=False, error="PDF not found.")
 
-    # Path to the original PDF file
-    pdf_path = os.path.join(app.static_folder, 'pdffile', folder_name, pdf_name)
-    trash_folder = os.path.join(app.static_folder, 'trash')
-    trash_path = os.path.join(trash_folder, pdf_name)
+    folder = Folder.query.get(pdf.folder_id)
+    department = Department.query.get(folder.dept_id)
+    sanitized_folder_name = sanitize_folder_name(folder.folder_name)
+    sanitized_dept_name = sanitize_folder_name(department.dept_name)
 
-    # Ensure the trash folder exists
-    os.makedirs(trash_folder, exist_ok=True)
-
+    # Full path of the PDF
+    pdf_path = os.path.join(app.static_folder, 'pdffile', sanitized_dept_name, sanitized_folder_name, pdf_name)
+    
     try:
-        # Move the file to the trash folder with the full path
-        shutil.move(pdf_path, trash_path)
+        if os.path.exists(pdf_path):
+            os.remove(pdf_path)
         db.session.delete(pdf)
         db.session.commit()
         return jsonify(success=True)
@@ -360,7 +374,7 @@ def register_user():
         username = request.form['username']
         password = request.form['password']
         role_id = request.form.get('role_id')
-        dept_id = request.form.get('dept_id')
+        dept_id = request.form.get('dept_id') or None
         
         # Check if the username is already taken
         existing_user = User.query.filter_by(username=username).first()
@@ -379,7 +393,7 @@ def register_user():
         flash('User registered successfully!')
         return redirect(url_for('admin_dashboard'))
     
-    return render_template('registration.html', roles=roles, departments=departments)
+    return render_template('admin_dashboard.html', roles=roles, departments=departments)
 
 @app.route('/delete_user/<int:user_id>', methods=['POST'])
 @login_required
@@ -392,6 +406,20 @@ def delete_user(user_id):
     db.session.delete(user)
     db.session.commit()
     return jsonify(success=True)
+
+@app.route('/get_permission_data/<int:permission_id>', methods=['GET'])
+@login_required
+@super_admin_required
+def get_permission_data(permission_id):
+    permission = Permission.query.get(permission_id)
+    if permission:
+        return jsonify({
+            'read_permission': permission.read_permission,
+            'write_permission': permission.write_permission,
+            'delete_permission': permission.delete_permission
+        })
+    return jsonify({'error': 'Permission not found'}), 404
+
 
 @app.route('/update_permission', methods=['POST'])
 @login_required
@@ -412,7 +440,6 @@ def update_permission():
         return jsonify(success=True)
     else:
         return jsonify(success=False, error="Permission not found")
-
 
 @app.route('/logout')
 @login_required

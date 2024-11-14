@@ -22,39 +22,74 @@
         <aside class="sidebar">
             <h2>Admin Actions</h2>
             <ul>
-                <li><a href="javascript:void(0)" onclick="toggleSection('registerSection')">Register User</a></li>
+                <li><a href="javascript:void(0)" onclick="toggleSection('manageUsersSection')">Manage User</a></li>
                 <li><a href="javascript:void(0)" onclick="toggleSection('managePermissionsSection')">Manage Permissions</a></li>
                 <li><a href="javascript:void(0)" onclick="toggleSection('manageDepartmentSection')">Manage Department</a></li>
-                <li><a href="javascript:void(0)" onclick="toggleSection('manageUsersSection')">Manage Users</a></li>
             </ul>
         </aside>
 
         <main class="dashboard-tabs">
-            <div id="registerSection" class="admin-section">
-                <h2>Register a New User</h2>
-                <form method="POST" action="{{ url_for('register_user') }}">
-                    <label for="username">Username:</label>
-                    <input type="text" id="username" name="username" required>
+            <!-- Manage Users Section -->
+            <div id="manageUsersSection" class="admin-section">
+                <h2>Manage Users</h2>
 
-                    <label for="password">Password:</label>
-                    <input type="password" id="password" name="password" required>
+                <!-- User Management Options -->
+                <div id="userManageOptions">
+                    <button onclick="showRegisterUserForm()">Register User</button>
+                    <button onclick="showManageUsersTable()">Manage Existing Users</button>
+                </div>
 
-                    <label for="role">Role:</label>
-                    <select id="role" name="role_id">
-                        {% for role in roles %}
-                            <option value="{{ role.role_id }}">{{ role.role_name }}</option>
+                <!-- Register User Form -->
+                <div id="registerUserForm" style="display: none;">
+                    <h3>Register a New User</h3>
+                    <form method="POST" action="{{ url_for('register_user') }}">
+                        <label for="username">Username:</label>
+                        <input type="text" id="username" name="username" required>
+            
+                        <label for="password">Password:</label>
+                        <input type="password" id="password" name="password" required>
+            
+                        <label for="role">Role:</label>
+                        <select id="role" name="role_id" onchange="handleRoleChange()">
+                            {% for role in roles %}
+                                <option value="{{ role.role_id }}">{{ role.role_name }}</option>
+                            {% endfor %}
+                        </select>
+            
+                        <label for="department" id="department-label">Department:</label>
+                        <select id="department" name="dept_id">
+                            <option value="">No Department</option>
+                            {% for department in departments %}
+                                <option value="{{ department.dept_id }}">{{ department.dept_name }}</option>
+                            {% endfor %}
+                        </select>
+            
+                        <button type="submit" class="form-submit">Register</button>
+                    </form>
+                    <button type="button" onclick="backToManageUsers()">Back</button>
+                </div>
+
+                <!-- Manage Existing Users Table -->
+                <div id="manageUsersTable" style="display: none;">
+                    <h3>Existing Users</h3>
+                    <table class="users-table">
+                        <tr>
+                            <th>Username</th>
+                            <th>Role</th>
+                            <th>Department</th>
+                            <th>Actions</th>
+                        </tr>
+                        {% for user in users %}
+                            <tr>
+                                <td>{{ user.username }}</td>
+                                <td>{{ user.role.role_name }}</td>
+                                <td>{{ user.department.dept_name }}</td>
+                                <td><button onclick="deleteUser('{{ user.user_id }}')">Delete</button></td>
+                            </tr>
                         {% endfor %}
-                    </select>
-
-                    <label for="department">Department:</label>
-                    <select id="department" name="dept_id">
-                        {% for department in departments %}
-                            <option value="{{ department.dept_id }}">{{ department.dept_name }}</option>
-                        {% endfor %}
-                    </select>
-
-                    <button type="submit" class="form-submit">Register</button>
-                </form>
+                    </table>
+                    <button type="button" onclick="backToManageUsers()">Back</button>
+                </div>
             </div>
 
             <!-- Manage Permissions Section -->
@@ -76,10 +111,28 @@
                             <td>{{ 'Yes' if permission.read_permission else 'No' }}</td>
                             <td>{{ 'Yes' if permission.write_permission else 'No' }}</td>
                             <td>{{ 'Yes' if permission.delete_permission else 'No' }}</td>
-                            <td><button onclick="editPermission({{ permission.permission_id }})">Edit</button></td>
+                            <td><button onclick="openEditPermissionModal({{ permission.permission_id }})">Edit</button></td>
                         </tr>
                     {% endfor %}
                 </table>
+            </div>
+
+            <!-- Modal for Editing Permissions -->
+            <div id="editPermissionModal" style="display: none;">
+                <h3>Edit Permissions</h3>
+                <form id="editPermissionForm" method="POST">
+                    <label for="read_permission">Read:</label>
+                    <input type="checkbox" name="read_permission" id="read_permission">
+
+                    <label for="write_permission">Write:</label>
+                    <input type="checkbox" name="write_permission" id="write_permission">
+
+                    <label for="delete_permission">Delete:</label>
+                    <input type="checkbox" name="delete_permission" id="delete_permission">
+
+                    <button type="submit">Save Changes</button>
+                    <button type="button" onclick="closeModal()">Cancel</button>
+                </form>
             </div>
 
             <!-- Manage Department Section -->
@@ -112,27 +165,6 @@
                     </form>
                 </div>
             </div>
-
-            <!-- Manage Users Section -->
-            <div id="manageUsersSection" class="admin-section" style="display: none;">
-                <h2>Manage Users</h2>
-                <table class="users-table">
-                    <tr>
-                        <th>Username</th>
-                        <th>Role</th>
-                        <th>Department</th>
-                        <th>Actions</th>
-                    </tr>
-                    {% for user in users %}
-                        <tr>
-                            <td>{{ user.username }}</td>
-                            <td>{{ user.role.role_name }}</td>
-                            <td>{{ user.department.dept_name }}</td>
-                            <td><button onclick="deleteUser('{{ user.user_id }}')">Delete</button></td>
-                        </tr>
-                    {% endfor %}
-                </table>
-            </div>
         </main>
     </div>
 
@@ -145,8 +177,37 @@
         }
 
         document.addEventListener("DOMContentLoaded", function() {
-            toggleSection('registerSection');
+            toggleSection('manageUsersSection');
         });
+
+        function showRegisterUserForm() {
+            document.getElementById('userManageOptions').style.display = 'none';
+            document.getElementById('registerUserForm').style.display = 'block';
+            document.getElementById('manageUsersTable').style.display = 'none';
+        }
+
+        function showManageUsersTable() {
+            document.getElementById('userManageOptions').style.display = 'none';
+            document.getElementById('registerUserForm').style.display = 'none';
+            document.getElementById('manageUsersTable').style.display = 'block';
+        }
+
+        function handleRoleChange() {
+            const roleSelect = document.getElementById("role");
+            const departmentSelect = document.getElementById("department");
+            const departmentLabel = document.getElementById("department-label");
+
+            const selectedRole = roleSelect.options[roleSelect.selectedIndex].text;
+
+            if (selectedRole === "Admin") {
+                departmentSelect.value = "";  
+                departmentSelect.style.display = "none";
+                departmentLabel.style.display = "none";
+            } else {
+                departmentSelect.style.display = "block";
+                departmentLabel.style.display = "block";
+            }
+        }
 
         function deleteUser(userId) {
             if (confirm("Are you sure you want to delete this user?")) {
@@ -165,6 +226,76 @@
             }
         }
 
+        function openEditPermissionModal(permissionId) {
+            // Fetch permission data from the server (GET request)
+            fetch(`/get_permission_data/${permissionId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        alert("Error fetching permission data");
+                        return;
+                    }
+
+                    // Set form values based on fetched data
+                    document.getElementById('read_permission').checked = data.read_permission;
+                    document.getElementById('write_permission').checked = data.write_permission;
+                    document.getElementById('delete_permission').checked = data.delete_permission;
+
+                    // Store the permission ID in a hidden field (for updating purposes)
+                    document.getElementById('editPermissionForm').setAttribute('data-permission-id', permissionId);
+
+                    // Show the modal
+                    document.getElementById('editPermissionModal').style.display = 'block';
+                })
+                .catch(err => {
+                    console.error("Error fetching permission data", err);
+                });
+        }
+
+        function closeModal() {
+            document.getElementById('editPermissionModal').style.display = 'none';
+        }
+
+        // Handle form submission (POST request to update permission)
+        document.getElementById('editPermissionForm').addEventListener('submit', function(event) {
+            event.preventDefault(); // Prevent the form from submitting normally
+
+            // Get the permission ID from the hidden attribute
+            const permissionId = document.getElementById('editPermissionForm').getAttribute('data-permission-id');
+
+            // Collect the data from the form
+            const read_permission = document.getElementById('read_permission').checked;
+            const write_permission = document.getElementById('write_permission').checked;
+            const delete_permission = document.getElementById('delete_permission').checked;
+
+            // Send the data to the server using a POST request
+            fetch('/update_permission', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    permission_id: permissionId,
+                    read_permission: read_permission,
+                    write_permission: write_permission,
+                    delete_permission: delete_permission
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert("Permissions updated successfully!");
+                    closeModal();  // Close the modal on success
+                } else {
+                    alert("Failed to update permissions.");
+                }
+            })
+            .catch(err => {
+                console.error("Error updating permission", err);
+            });
+        });
+
+
         function showAddDeptForm() {
             document.getElementById('manageDeptOptions').style.display = 'none';
             document.getElementById('addDeptForm').style.display = 'block';
@@ -173,14 +304,25 @@
 
         function showDeleteDeptForm() {
             document.getElementById('manageDeptOptions').style.display = 'none';
-            document.getElementById('deleteDeptForm').style.display = 'block';
             document.getElementById('addDeptForm').style.display = 'none';
+            document.getElementById('deleteDeptForm').style.display = 'block';
         }
 
         function resetManageDept() {
             document.getElementById('manageDeptOptions').style.display = 'block';
             document.getElementById('addDeptForm').style.display = 'none';
             document.getElementById('deleteDeptForm').style.display = 'none';
+        }
+
+        function backToManageUsers() {
+            document.getElementById('userManageOptions').style.display = 'block';
+            document.getElementById('registerUserForm').style.display = 'none';
+            document.getElementById('manageUsersTable').style.display = 'none';
+        }
+
+        function backToDashboard() {
+            document.getElementById('managePermissionsSection').style.display = 'none';
+            document.getElementById('manageUsersSection').style.display = 'block';
         }
     </script>
 </body>
