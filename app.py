@@ -7,8 +7,8 @@ from sqlalchemy import case, ForeignKey
 from sqlalchemy.orm import relationship
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
-from flask import Flask, render_template, redirect, url_for, request, flash, jsonify, session, abort
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+from flask import Flask, render_template, redirect, url_for, request, flash, jsonify, session, abort, send_from_directory
 
 load_dotenv()
 
@@ -74,14 +74,14 @@ class PDF(db.Model):
 class Permission(db.Model):
     __tablename__ = 'permissions'
     permission_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    role_id = db.Column(db.Integer, db.ForeignKey('roles.role_id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
     dept_id = db.Column(db.Integer, db.ForeignKey('departments.dept_id'), nullable=False)
     read_permission = db.Column(db.Boolean, default=True)
     write_permission = db.Column(db.Boolean, default=False)
     delete_permission = db.Column(db.Boolean, default=False)
 
     # Define the relationships
-    role = db.relationship("Role", backref="permissions")
+    user = db.relationship("User", backref="permissions")
     department = db.relationship("Department", back_populates="permissions", foreign_keys=[dept_id])
 
 def super_admin_required(f):
@@ -118,6 +118,16 @@ def login():
 @login_required
 def home():
     pdf_structure = {}
+
+    user_permissions = Permission.query.filter_by(user_id=current_user.user_id).all()
+    user_permission_map = {
+        perm.dept_id: {
+            'read': perm.read_permission,
+            'write': perm.write_permission,
+            'delete': perm.delete_permission
+        }
+        for perm in user_permissions
+    }
 
     if current_user.role_id == 1:  # Admin can view all folders
         departments = Department.query.order_by(
@@ -224,28 +234,31 @@ def edit_folder():
 @app.route('/upload_pdf', methods=['POST'])
 @login_required
 def upload_pdf():
-    if current_user.role_id != 1:
-        return jsonify(success=False, error="You do not have permission to upload PDFs.")
+    # Check if user has write permission
+    folder_name = request.form.get('folder').strip()
+    folder = Folder.query.filter_by(folder_name=folder_name).first()
     
+    if not folder:
+        return jsonify(success=False, error="Folder not found.")
+
+    permission = Permission.query.filter_by(user_id=current_user.user_id, dept_id=folder.dept_id).first()
+    if not permission or not permission.write_permission:
+        return jsonify(success=False, error="You do not have permission to upload PDFs.")
+
     if 'pdfFile' not in request.files:
         return jsonify(success=False, error="No file part in the request.")
-    
+
     file = request.files['pdfFile']
-    folder_name = request.form.get('folder').strip()
     filename = secure_filename(file.filename.strip())
 
     # Sanitize and create folder structure path
-    folder = Folder.query.filter_by(folder_name=folder_name).first()
-    if not folder:
-        return jsonify(success=False, error="Folder not found.")
-    
     department = Department.query.get(folder.dept_id)
     sanitized_folder_name = sanitize_folder_name(folder_name)
     sanitized_dept_name = sanitize_folder_name(department.dept_name)
     folder_path = os.path.join(app.static_folder, 'pdffile', sanitized_dept_name, sanitized_folder_name)
-    
+
     os.makedirs(folder_path, exist_ok=True)  # Ensure folder exists
-    
+
     file_path = os.path.join(folder_path, filename)
     file.save(file_path)
 
@@ -290,31 +303,32 @@ def delete_folder():
 @app.route('/delete_pdf', methods=['POST'])
 @login_required
 def delete_pdf():
-    if current_user.role_id != 1:
-        return jsonify(success=False, error="You do not have permission to delete PDFs.")
-
+    # Get folder and PDF details
     data = request.get_json()
     folder_name = data.get('folderName').strip()
     pdf_name = data.get('pdfName').strip()
 
-    # Retrieve the PDF and folder details
-    pdf = PDF.query.join(Folder).filter(
-        Folder.folder_name == folder_name,
-        PDF.pdf_name == pdf_name
-    ).first()
+    folder = Folder.query.filter_by(folder_name=folder_name).first()
+    if not folder:
+        return jsonify(success=False, error="Folder not found.")
 
+    # Check if user has delete permission
+    permission = Permission.query.filter_by(user_id=current_user.user_id, dept_id=folder.dept_id).first()
+    if not permission or not permission.delete_permission:
+        return jsonify(success=False, error="You do not have permission to delete PDFs.")
+
+    # Retrieve PDF and sanitize paths
+    pdf = PDF.query.filter_by(folder_id=folder.folder_id, pdf_name=pdf_name).first()
     if not pdf:
         return jsonify(success=False, error="PDF not found.")
 
-    folder = Folder.query.get(pdf.folder_id)
     department = Department.query.get(folder.dept_id)
     sanitized_folder_name = sanitize_folder_name(folder.folder_name)
     sanitized_dept_name = sanitize_folder_name(department.dept_name)
-
-    # Full path of the PDF
     pdf_path = os.path.join(app.static_folder, 'pdffile', sanitized_dept_name, sanitized_folder_name, pdf_name)
-    
+
     try:
+        # Delete file and database entry
         if os.path.exists(pdf_path):
             os.remove(pdf_path)
         db.session.delete(pdf)
@@ -407,6 +421,48 @@ def delete_user(user_id):
     db.session.commit()
     return jsonify(success=True)
 
+@app.route('/add_permission', methods=['POST'])
+@login_required
+@super_admin_required
+def add_permission():
+    user_id = request.form.get('user_id')
+    dept_id = request.form.get('dept_id')
+    read_permission = request.form.get('read_permission') == '1'
+    write_permission = request.form.get('write_permission') == '1'
+    delete_permission = request.form.get('delete_permission') == '1'
+
+    if not user_id or not dept_id:
+        return jsonify(success=False, error="User ID and Department ID are required."), 400
+    
+    existing_permission = Permission.query.filter_by(user_id=user_id, dept_id=dept_id).first()
+    if existing_permission:
+        return jsonify(success=False, error="Permission already exists for this user and department."), 400
+
+    # Check if the user and department exist
+    user = User.query.get(user_id)
+    department = Department.query.get(dept_id)
+
+    if not user or not department:
+        return jsonify(success=False, error="Invalid user or department."), 400
+
+    # Add the new permission
+    new_permission = Permission(
+        user_id=user_id,
+        dept_id=dept_id,
+        read_permission=read_permission,
+        write_permission=write_permission,
+        delete_permission=delete_permission
+    )
+    db.session.add(new_permission)
+    try:
+        db.session.commit()
+        print("Permission successfully added.")
+        return jsonify(success=True, message="Permission added successfully.")
+    except Exception as e:
+        print("Error while adding permission:", e)
+        db.session.rollback()
+        return jsonify(success=False, error="Failed to add permission."), 500
+
 @app.route('/get_permission_data/<int:permission_id>', methods=['GET'])
 @login_required
 @super_admin_required
@@ -420,7 +476,6 @@ def get_permission_data(permission_id):
         })
     return jsonify({'error': 'Permission not found'}), 404
 
-
 @app.route('/update_permission', methods=['POST'])
 @login_required
 @super_admin_required
@@ -431,15 +486,24 @@ def update_permission():
     write_permission = data.get('write_permission')
     delete_permission = data.get('delete_permission')
 
+    print(f"Updating permission {permission_id}: Read={read_permission}, Write={write_permission}, Delete={delete_permission}")
+
     permission = Permission.query.get(permission_id)
     if permission:
         permission.read_permission = read_permission
         permission.write_permission = write_permission
         permission.delete_permission = delete_permission
-        db.session.commit()
-        return jsonify(success=True)
+        try:
+            db.session.commit()
+            print("Permission successfully updated.")
+            return jsonify(success=True)
+        except Exception as e:
+            print("Error while updating permission:", e)
+            db.session.rollback()
+            return jsonify(success=False, error="Failed to update permission."), 500
     else:
-        return jsonify(success=False, error="Permission not found")
+        print("Permission not found.")
+        return jsonify(success=False, error="Permission not found"), 404
 
 @app.route('/logout')
 @login_required

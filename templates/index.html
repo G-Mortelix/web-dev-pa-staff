@@ -50,19 +50,23 @@
                         <span class="folder-name">{{ folder }}</span>
                         <span class="folder-icons">
                             {% if current_user.role_id == 1 %}
-                                <img src="{{ url_for('static', filename='icons/add-file.png') }}" 
-                                onclick="addPDF('{{ folder }}')" class="add-pdf-icon" alt="Add PDF">
+                                {% if current_user.role_id == 1 or permissions[folder.dept_id]['write'] %}
+                                    <img src="{{ url_for('static', filename='icons/add-file.png') }}" 
+                                    onclick="addPDF('{{ folder }}')" class="add-pdf-icon" alt="Add PDF">
+                                {% endif %}
                                 <img src="{{ url_for('static', filename='icons/edit.png') }}" 
                                 onclick="editFolderPrompt('{{ folder }}')" class="edit-folder-icon" alt="Edit">
-                                <img src="{{ url_for('static', filename='icons/delete.png') }}" 
-                                onclick="deleteFolder('{{ folder }}')" class="delete-icon" alt="Delete">
+                                {% if current_user.role_id == 1 or permissions[folder.dept_id]['delete'] %}
+                                    <img src="{{ url_for('static', filename='icons/delete.png') }}" 
+                                    onclick="deleteFolder('{{ folder }}')" class="delete-icon" alt="Delete">
+                                {% endif %}
                             {% endif %}
                         </span>
                     </div>
                     <ul>
                         {% for pdf in pdffiles %}
                             <li class="pdf-item">
-                                <a href="#" onclick="loadPDF('{{ folder }}/{{ pdf }}'); return false;">{{ pdf }}</a>
+                                <a href="#" onclick="loadPDF('{{ pdf }}', '{{ department }}', '{{ folder }}'); return false;">{{ pdf }}</a>
                                 {% if current_user.role_id == 1 %}
                                     <img src="{{ url_for('static', filename='icons/delete.png') }}" 
                                     onclick="deletePDF('{{ folder }}', '{{ pdf }}')" class="delete-pdf-icon" alt="Delete">
@@ -75,6 +79,9 @@
         </aside>
 
         <main class="pdf-viewer-container">
+            <div id="loading-spinner" style="display: none;">
+                <div class="spinner"></div>
+            </div>
             <div id="welcome-message">
                 <h2>Welcome to Pro Amity Corporate Internal Website</h2>
                 <p>Select a document from the sidebar to view it here.</p>
@@ -86,13 +93,17 @@
 
     <script>
         // Function to load and render a PDF
-        function loadPDF(pdfPath) {
-            const url = "{{ url_for('static', filename='pdffile') }}/" + pdfPath;
+        function loadPDF(pdfPath, department, folder) {
+            const url = "{{ url_for('static', filename='pdffile') }}/" + department + "/" + folder + "/" + pdfPath;
 
+            document.getElementById('loading-spinner').style.display = 'flex';
             document.getElementById('welcome-message').style.display = 'none';
             document.getElementById('pdf-viewer').innerHTML = '';
 
             pdfjsLib.getDocument(url).promise.then(pdf => {
+                // spinner hides when pdf shows up  
+                document.getElementById('loading-spinner').style.display = 'none';
+
                 // Loop through each page in the PDF and render it
                 for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
                     pdf.getPage(pageNum).then(page => {
@@ -112,6 +123,10 @@
                         });
                     });
                 }
+            }).catch(error => {
+                // Hide the spinner and display an error message if something goes wrong
+                document.getElementById('loading-spinner').style.display = 'none';
+                alert('Failed to load PDF: ' + error.message);
             });
         }
 
