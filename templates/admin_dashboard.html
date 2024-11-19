@@ -45,17 +45,20 @@
                     <form method="POST" action="{{ url_for('register_user') }}">
                         <label for="username">Username:</label>
                         <input type="text" id="username" name="username" required>
-            
+                
                         <label for="password">Password:</label>
-                        <input type="password" id="password" name="password" required>
-            
+                        <div class="password-container">
+                            <input type="password" id="register-password" name="password" required>
+                            <span class="toggle-password" onclick="togglePasswordVisibility('register-password')">👁️</span>
+                        </div>
+                
                         <label for="role">Role:</label>
                         <select id="role" name="role_id" onchange="handleRoleChange()">
                             {% for role in roles %}
                                 <option value="{{ role.role_id }}">{{ role.role_name }}</option>
                             {% endfor %}
                         </select>
-            
+                
                         <label for="department" id="department-label">Department:</label>
                         <select id="department" name="dept_id">
                             <option value="" class="no-dept-option" style="display: none;">No Department</option>
@@ -63,11 +66,11 @@
                                 <option value="{{ department.dept_id }}">{{ department.dept_name }}</option>
                             {% endfor %}
                         </select>
-            
+                
                         <button type="submit" class="form-submit">Register</button>
                     </form>
                     <button type="button" onclick="backToManageUsers()">Back</button>
-                </div>
+                </div>                
 
                 <!-- Manage Existing Users Table -->
                 <div id="manageUsersTable" style="display: none;">
@@ -205,6 +208,16 @@
     </div>
 
     <script>
+
+        function togglePasswordVisibility(inputId) {
+            const passwordInput = document.getElementById(inputId);
+            if (passwordInput.type === "password") {
+                passwordInput.type = "text";
+            } else {
+                passwordInput.type = "password";
+            }
+        }
+        
         function toggleSection(sectionId) {
             document.querySelectorAll('.admin-section').forEach(section => {
                 section.style.display = 'none';

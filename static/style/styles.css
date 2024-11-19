@@ -82,6 +82,19 @@ body {
     border: 1px solid #ff6666;
 }
 
+.password-container {
+    position: relative;
+}
+
+.toggle-password {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    cursor: pointer;
+    font-size: 0.9rem;
+}
+
 /* header in index */
 header {
     display: flex;

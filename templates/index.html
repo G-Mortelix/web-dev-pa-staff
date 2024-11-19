@@ -120,20 +120,27 @@
             document.addEventListener('mousemove', onMouseMove);
             document.addEventListener('mouseup', onMouseUp);
         });
+
+        function sanitizeName(name) {
+            // Replace invalid characters as done in the backend
+            return name.replace(/[<>:"/\\|?*]/g, '').trim();
+        }
         
         // Function to load and render a PDF
         function loadPDF(pdfPath, department, folder) {
-            const url = "{{ url_for('static', filename='pdffile') }}/" + department + "/" + folder + "/" + pdfPath;
+            // Use the updated sanitizeName function
+            const sanitizedFolder = sanitizeName(folder);
+            const sanitizedDepartment = sanitizeName(department);
+
+            const url = "{{ url_for('static', filename='pdffile') }}/" + sanitizedDepartment + "/" + sanitizedFolder + "/" + pdfPath;
 
             document.getElementById('loading-spinner').style.display = 'flex';
             document.getElementById('welcome-message').style.display = 'none';
             document.getElementById('pdf-viewer').innerHTML = '';
 
             pdfjsLib.getDocument(url).promise.then(pdf => {
-                // spinner hides when pdf shows up  
                 document.getElementById('loading-spinner').style.display = 'none';
 
-                // Loop through each page in the PDF and render it
                 for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
                     pdf.getPage(pageNum).then(page => {
                         const scale = 1.0;
@@ -153,7 +160,6 @@
                     });
                 }
             }).catch(error => {
-                // Hide the spinner and display an error message if something goes wrong
                 document.getElementById('loading-spinner').style.display = 'none';
                 alert('Failed to load PDF: ' + error.message);
             });

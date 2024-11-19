@@ -150,11 +150,20 @@ def home():
     for department in departments:
         folders = Folder.query.filter_by(dept_id=department.dept_id).all()
         pdf_structure[department.dept_name] = {}
-        for folder in folders:
+
+        # Sort folders by numeric values (including decimals with two places)
+        def folder_sort_key(folder):
+            parts = re.split(r'(\d+(?:\.\d{1,2})?)', folder.folder_name)
+            # Convert numeric parts to float for proper sorting
+            return [float(part) if part.replace('.', '', 1).isdigit() else part.lower() for part in parts]
+
+        sorted_folders = sorted(folders, key=folder_sort_key)
+
+        for folder in sorted_folders:
+            sanitized_folder_name = sanitize_folder_name(folder.folder_name)
             pdfs = PDF.query.filter_by(folder_id=folder.folder_id).all()
             pdf_files = [pdf.pdf_name for pdf in pdfs]
-            # Store folder_name as key and include dept_id
-            pdf_structure[department.dept_name][folder.folder_name] = {
+            pdf_structure[department.dept_name][sanitized_folder_name] = {
                 "files": pdf_files,
                 "dept_id": folder.dept_id
             }
@@ -211,12 +220,14 @@ def add_folder():
 
     return jsonify(success=True)
 
-
 def sanitize_folder_name(name):
-    # Replace any character that is not alphanumeric, space, hyphen, or underscore
-    sanitized_name = re.sub(r'[<>:"/\\|?*]', "", name)
-    sanitized_name = sanitized_name.strip()  # Remove leading and trailing whitespace
-    return sanitized_name
+    """
+    Sanitize a folder name by removing invalid characters.
+    """
+    # Replace invalid characters with an underscore
+    sanitized_name = re.sub(r'[<>:"/\\|?*]', "_", name)
+    return sanitized_name.strip()  # Remove leading and trailing whitespace
+
 
 @app.route('/edit_folder', methods=['POST'])
 @login_required
@@ -239,49 +250,73 @@ def edit_folder():
         return jsonify(success=False, error="A folder with this name already exists.")
 
     # Update the folder name in the database
-    folder.folder_name = new_folder_name
-    db.session.commit()
+    old_sanitized_folder_name = sanitize_folder_name(old_folder_name)
+    new_sanitized_folder_name = sanitize_folder_name(new_folder_name)
 
-    return jsonify(success=True)
+    department = Department.query.get(folder.dept_id)
+    sanitized_dept_name = sanitize_folder_name(department.dept_name)
+
+    old_folder_path = os.path.join(app.static_folder, 'pdffile', sanitized_dept_name, old_sanitized_folder_name)
+    new_folder_path = os.path.join(app.static_folder, 'pdffile', sanitized_dept_name, new_sanitized_folder_name)
+
+    try:
+        # Rename the folder in the filesystem
+        if os.path.exists(old_folder_path):
+            os.rename(old_folder_path, new_folder_path)
+
+        # Update the folder name in the database
+        folder.folder_name = new_folder_name
+
+        # Update PDF paths in the database
+        pdfs = PDF.query.filter_by(folder_id=folder.folder_id).all()
+        for pdf in pdfs:
+            old_pdf_path = os.path.join(old_folder_path, pdf.pdf_name)
+            new_pdf_path = os.path.join(new_folder_path, pdf.pdf_name)
+
+            # Update the path in the database
+            pdf.pdf_path = new_pdf_path
+
+        db.session.commit()
+        return jsonify(success=True)
+    except Exception as e:
+        db.session.rollback()
+        return jsonify(success=False, error=f"Failed to rename folder: {e}")
 
 @app.route('/upload_pdf', methods=['POST'])
 @login_required
 def upload_pdf():
     folder_name = request.form.get('folder').strip()
-    folder = Folder.query.filter_by(folder_name=folder_name).first()
+    sanitized_folder_name = sanitize_folder_name(folder_name)
+    folder = Folder.query.filter_by(folder_name=sanitized_folder_name).first()
 
     if not folder:
         return jsonify(success=False, error="Folder not found.")
 
-    # Admins bypass permission checks
     if current_user.role_id != 1:
-        # Check user permissions
         permission = Permission.query.filter_by(user_id=current_user.user_id, dept_id=folder.dept_id).first()
         if not permission or not permission.write_permission:
-          return jsonify(success=False, error="You do not have permission to upload PDFs.")
-  
+            return jsonify(success=False, error="You do not have permission to upload PDFs.")
+
     if 'pdfFile' not in request.files:
         return jsonify(success=False, error="No file part in the request.")
 
     file = request.files['pdfFile']
     filename = secure_filename(file.filename.strip())
 
-    # Sanitize and create folder structure path
     department = Department.query.get(folder.dept_id)
-    sanitized_folder_name = sanitize_folder_name(folder_name)
     sanitized_dept_name = sanitize_folder_name(department.dept_name)
     folder_path = os.path.join(app.static_folder, 'pdffile', sanitized_dept_name, sanitized_folder_name)
 
-    os.makedirs(folder_path, exist_ok=True)  # Ensure folder exists
+    os.makedirs(folder_path, exist_ok=True)
 
     file_path = os.path.join(folder_path, filename)
     file.save(file_path)
 
-    # Store file info in the database
     new_pdf = PDF(folder_id=folder.folder_id, pdf_name=filename, pdf_path=file_path)
     db.session.add(new_pdf)
     db.session.commit()
     return jsonify(success=True)
+
 
 @app.route('/delete_folder', methods=['POST'])
 @login_required

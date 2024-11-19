@@ -8,7 +8,10 @@
     <h2>Login</h2>
     <form method="POST" action="{{ url_for('login') }}">
         <input type="text" name="username" placeholder="Username" required>
-        <input type="password" name="password" placeholder="Password" required>
+        <div class="password-container">
+            <input type="password" id="login-password" name="password" placeholder="Password" required>
+            <span class="toggle-password" onclick="togglePasswordVisibility('login-password')">👁️</span>
+        </div>
         <button type="submit">Login</button>
     </form>
 
@@ -20,5 +23,15 @@
             </div>
         {% endif %}
     {% endwith %}
+    <script>
+        function togglePasswordVisibility(inputId) {
+            const passwordInput = document.getElementById(inputId);
+            if (passwordInput.type === "password") {
+                passwordInput.type = "text";
+            } else {
+                passwordInput.type = "password";
+            }
+        }
+    </script>
 </body>
 </html>
