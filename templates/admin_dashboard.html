@@ -118,10 +118,6 @@
                                 <option value="{{ department.dept_id }}">{{ department.dept_name }}</option>
                             {% endfor %}
                         </select>
-            
-                        <label for="read_permission">Read Permission:</label>
-                        <input type="checkbox" id="read_permission" name="read_permission" value="1">
-                        <input type="hidden" name="read_permission" value="0"> <!-- Default value if unchecked -->
 
                         <label for="write_permission">Write Permission:</label>
                         <input type="checkbox" id="write_permission" name="write_permission" value="1">
@@ -143,16 +139,14 @@
                         <tr>
                             <th>Username</th>
                             <th>Department</th>
-                            <th>Read</th>
-                            <th>Write</th>
-                            <th>Delete</th>
+                            <th>Write (Upload a PDF)</th>
+                            <th>Delete (Delete a PDF)</th>
                             <th>Actions</th>
                         </tr>
                         {% for permission in permissions %}
                             <tr>
                                 <td>{{ permission.user.username }}</td>
                                 <td>{{ permission.department.dept_name }}</td>
-                                <td>{{ 'Yes' if permission.read_permission else 'No' }}</td>
                                 <td>{{ 'Yes' if permission.write_permission else 'No' }}</td>
                                 <td>{{ 'Yes' if permission.delete_permission else 'No' }}</td>
                                 <td><button onclick="openEditPermissionModal({{ permission.permission_id }})">Edit</button></td>
@@ -165,9 +159,6 @@
                 <div id="editPermissionModal" style="display: none;">
                     <h3>Edit Permissions</h3>
                     <form id="editPermissionForm" data-permission-id="">
-                        <label for="edit_read_permission">Read:</label>
-                        <input type="checkbox" name="read_permission" id="edit_read_permission">
-
                         <label for="edit_write_permission">Write:</label>
                         <input type="checkbox" name="write_permission" id="edit_write_permission">
 
@@ -279,21 +270,21 @@
             }
         }
         function showAddPermissionForm() {
-            document.getElementById('permissionManageOptions').style.display = 'none';
             document.getElementById('addPermissionForm').style.display = 'block';
             document.getElementById('managePermissionsTable').style.display = 'none';
+            document.getElementById('permissionManageOptions').style.display = 'none';
         }
 
         function showManagePermissionsTable() {
-            document.getElementById('permissionManageOptions').style.display = 'none';
             document.getElementById('addPermissionForm').style.display = 'none';
             document.getElementById('managePermissionsTable').style.display = 'block';
+            document.getElementById('permissionManageOptions').style.display = 'none';
         }
 
         function resetManagePermissions() {
-            document.getElementById('permissionManageOptions').style.display = 'block';
             document.getElementById('addPermissionForm').style.display = 'none';
             document.getElementById('managePermissionsTable').style.display = 'none';
+            document.getElementById('permissionManageOptions').style.display = 'block';
         }
 
 
@@ -307,7 +298,6 @@
                     }
 
                     // Populate modal fields
-                    document.getElementById('edit_read_permission').checked = data.read_permission;
                     document.getElementById('edit_write_permission').checked = data.write_permission;
                     document.getElementById('edit_delete_permission').checked = data.delete_permission;
 
@@ -324,7 +314,6 @@
 
         function savePermissionChanges() {
             const permissionId = document.getElementById('editPermissionForm').getAttribute('data-permission-id');
-            const read_permission = document.getElementById('edit_read_permission').checked;
             const write_permission = document.getElementById('edit_write_permission').checked;
             const delete_permission = document.getElementById('edit_delete_permission').checked;
 
@@ -333,7 +322,6 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     permission_id: permissionId,
-                    read_permission: read_permission,
                     write_permission: write_permission,
                     delete_permission: delete_permission,
                 }),
@@ -366,7 +354,6 @@
             const permissionId = document.getElementById('editPermissionForm').getAttribute('data-permission-id');
 
             // Collect the data from the form
-            const read_permission = document.getElementById('read_permission').checked;
             const write_permission = document.getElementById('write_permission').checked;
             const delete_permission = document.getElementById('delete_permission').checked;
 
@@ -378,7 +365,6 @@
                 },
                 body: JSON.stringify({
                     permission_id: permissionId,
-                    read_permission: read_permission,
                     write_permission: write_permission,
                     delete_permission: delete_permission
                 })

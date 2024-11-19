@@ -30,7 +30,7 @@
     </header>
     
     <div class="container">
-        <aside class="sidebar">
+        <aside class="sidebar" id="resizableSidebar">
             {% for department, folders in pdf_structure.items() %}
                 <div class="department-container">
                     <h2 class="department-heading">{{ department }}</h2>
@@ -42,42 +42,44 @@
                     {% endif %}
                 </div>
     
-                {% for folder, pdffiles in folders.items() %}
+                {% for folder_name, folder_data in folders.items() %}
                     <div class="folder-container">
                         <span class="folder-icon">
                             <img src="{{ url_for('static', filename='icons/folder.png') }}" alt="Folder Icon">
                         </span>
-                        <span class="folder-name">{{ folder }}</span>
+                        <span class="folder-name">{{ folder_name }}</span>
                         <span class="folder-icons">
+                            {% set perm = permissions.get(folder_data.dept_id, {'write': False, 'delete': False}) %}
+                            {% if current_user.role_id == 1 or perm['write'] %}
+                                <img src="{{ url_for('static', filename='icons/add-file.png') }}" 
+                                onclick="addPDF('{{ folder_name }}')" class="add-pdf-icon" alt="Add PDF">
+                            {% endif %}
                             {% if current_user.role_id == 1 %}
-                                {% if current_user.role_id == 1 or permissions[folder.dept_id]['write'] %}
-                                    <img src="{{ url_for('static', filename='icons/add-file.png') }}" 
-                                    onclick="addPDF('{{ folder }}')" class="add-pdf-icon" alt="Add PDF">
-                                {% endif %}
                                 <img src="{{ url_for('static', filename='icons/edit.png') }}" 
-                                onclick="editFolderPrompt('{{ folder }}')" class="edit-folder-icon" alt="Edit">
-                                {% if current_user.role_id == 1 or permissions[folder.dept_id]['delete'] %}
-                                    <img src="{{ url_for('static', filename='icons/delete.png') }}" 
-                                    onclick="deleteFolder('{{ folder }}')" class="delete-icon" alt="Delete">
-                                {% endif %}
+                                onclick="editFolderPrompt('{{ folder_name }}')" class="edit-folder-icon" alt="Edit">
+                            {% endif %}
+                            {% if current_user.role_id == 1 %}
+                                <img src="{{ url_for('static', filename='icons/delete.png') }}" 
+                                onclick="deleteFolder('{{ folder_name }}')" class="delete-icon" alt="Delete">
                             {% endif %}
                         </span>
                     </div>
                     <ul>
-                        {% for pdf in pdffiles %}
+                        {% for pdf in folder_data.files %}
                             <li class="pdf-item">
-                                <a href="#" onclick="loadPDF('{{ pdf }}', '{{ department }}', '{{ folder }}'); return false;">{{ pdf }}</a>
-                                {% if current_user.role_id == 1 %}
+                                <a href="#" onclick="loadPDF('{{ pdf }}', '{{ department }}', '{{ folder_name }}'); return false;">{{ pdf }}</a>
+                                {% if current_user.role_id == 1 or perm['delete'] %}
                                     <img src="{{ url_for('static', filename='icons/delete.png') }}" 
-                                    onclick="deletePDF('{{ folder }}', '{{ pdf }}')" class="delete-pdf-icon" alt="Delete">
+                                    onclick="deletePDF('{{ folder_name }}', '{{ pdf }}')" class="delete-pdf-icon" alt="Delete">
                                 {% endif %}
                             </li>
                         {% endfor %}
                     </ul>
                 {% endfor %}
             {% endfor %}
+            <div class="resizer" id="sidebarResizer"></div>
         </aside>
-
+    
         <main class="pdf-viewer-container">
             <div id="loading-spinner" style="display: none;">
                 <div class="spinner"></div>
@@ -89,9 +91,36 @@
             <div id="pdf-viewer"></div>
         </main>
     </div>
-
-
+    
     <script>
+        const sidebar = document.querySelector('.sidebar');
+        const resizer = document.querySelector('.resizer');
+        const mainContent = document.querySelector('.pdf-viewer-container');
+
+        resizer.addEventListener('mousedown', function (e) {
+            e.preventDefault();
+
+            // Record the initial mouse position and sidebar width
+            const startX = e.clientX;
+            const startWidth = sidebar.offsetWidth;
+
+            // Function to handle mouse movement
+            function onMouseMove(e) {
+                const newWidth = Math.min(Math.max(startWidth + e.clientX - startX, 150), 400); // Restrict width
+                sidebar.style.width = `${newWidth}px`; // Set new sidebar width
+            }
+
+            // Function to clean up event listeners
+            function onMouseUp() {
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('mouseup', onMouseUp);
+            }
+
+            // Attach event listeners
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
+        });
+        
         // Function to load and render a PDF
         function loadPDF(pdfPath, department, folder) {
             const url = "{{ url_for('static', filename='pdffile') }}/" + department + "/" + folder + "/" + pdfPath;
@@ -187,7 +216,7 @@
                     .then(data => {
                         if (data.success) {
                             alert("PDF uploaded successfully!");
-                            location.reload();  // Reload the page to show the new PDF
+                            location.reload();
                         } else {
                             alert("Error: " + data.error);
                         }
@@ -256,7 +285,6 @@
                 });
             }
         }
-
     </script>
 </body>
 </html>

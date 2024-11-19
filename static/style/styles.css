@@ -169,6 +169,7 @@ header {
 .container {
     display: flex;
     height: 100vh;
+    overflow: hidden
 }
 
 /* spinner for the pdf viewer */
@@ -208,12 +209,14 @@ header {
 
 /* sidebar layout*/
 .sidebar {
-    top: 0;
+    min-width: 150px; 
+    max-width: 400px;
     width: 250px;
     padding: 20px;
-    overflow-x: auto;
     overflow-y: auto;
     background-color: #f4f4f4;
+    position: relative;
+    flex-shrink: 0; /* Prevents sidebar from shrinking */
 }
 
 /* sidebar title */
@@ -249,6 +252,16 @@ header {
 /* sidebar hover style*/
 .sidebar a:hover {
     text-decoration: underline;
+}
+
+.resizer {
+    width: 5px;
+    cursor: ew-resize;
+    background: #ddd;
+    height: 100vh;
+    position: absolute;
+    right: 0; /* Align to the right edge of the sidebar */
+    top: 0;
 }
 
 /* dept layout */
@@ -342,6 +355,7 @@ header {
     flex: 1;
     overflow-y: auto;
     background-color: #ffffff;
+    transition: margin-left 0.2s ease;
 }
 
 /* pdf viewer item size */
@@ -378,6 +392,30 @@ body.admin-dashboard {
     color: #333;
 }
 
+/* admin actions main page title design */
+.admin-section h2 {
+    font-size: 1.5rem;
+    color: black;
+    margin-bottom: 10px;
+    border-bottom: 2px solid #161616;
+    padding-bottom: 5px;
+}
+
+.admin-section button {
+    background-color: #007f28;
+    color: white;
+    border: none;
+    padding: 10px 15px;
+    margin: 5px 0;
+    cursor: pointer;
+    border-radius: 4px;
+    font-size: 1rem;
+}
+
+.admin-section button:hover {
+    background-color: #004404;
+}
+
 /* dashboard content page layout */
 .dashboard-tabs {
     flex: 1;
@@ -410,13 +448,6 @@ body.admin-dashboard {
     background-color: #f2f2f2;
 }
 
-/* form submission register and delete button design */
-form label {
-    display: block;
-    margin-bottom: 5px;
-    font-weight: bold;
-}
-
 input[type="text"], input[type="password"], select {
     width: 100%;
     padding: 10px;
@@ -429,28 +460,6 @@ input[type="text"], input[type="password"], select {
 input[type="text"]:focus, input[type="password"]:focus, select:focus {
     border-color: #007bff;
 }
-
-.form-submit {
-    border: none;
-    color: white;
-    cursor: pointer;
-    padding: 10px 20px;
-    background-color: #007bff;
-}
-.form-submit:hover {
-    background-color: #0056b3;
-}
-.form-submit.delete {
-    border: none;
-    color: white;
-    cursor: pointer;
-    padding: 10px 20px;
-    background-color: #d9534f;
-}
-.form-submit.delete:hover {
-    background-color: #c9302c;
-}
-
 
 
 
