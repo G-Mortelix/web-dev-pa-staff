@@ -178,7 +178,7 @@ def admin_dashboard():
     roles = Role.query.all()
     departments = Department.query.all()
     permissions = Permission.query.all()
-    users = User.query.all()
+    users = User.query.filter(User.role_id != 1).all()
     return render_template(
         'admin_dashboard.html',
         roles=roles,
@@ -521,19 +521,27 @@ def add_permission():
 
     if not user_id or not dept_id:
         flash('User ID and Department ID are required.', 'error')
-        return redirect(url_for('admin_dashboard'))
-    
+        return redirect(url_for('admin_dashboard'))  # Ensure a redirect
+
     existing_permission = Permission.query.filter_by(user_id=user_id, dept_id=dept_id).first()
     if existing_permission:
         flash('Permission already exists for this user and department.', 'error')
-        return redirect(url_for('admin_dashboard'))
+        return redirect(url_for('admin_dashboard'))  # Ensure a redirect
 
     # Check if the user and department exist
     user = User.query.get(user_id)
+    if user.role_id == 1:  # Prevent adding permissions for admins
+        flash('Cannot add permissions for admins.', 'error')
+        return redirect(url_for('admin_dashboard'))
+    
     department = Department.query.get(dept_id)
-
     if not user or not department:
         flash('Invalid user or department.', 'error')
+        return redirect(url_for('admin_dashboard'))  # Ensure a redirect
+    
+    # Validate that the user belongs to the department or has the right permissions
+    if user.role_id != 1 and user.dept_id != int(dept_id):  # Admins bypass validation
+        flash(f"User '{user.username}' does not belong to the '{department.dept_name}' department.", 'error')
         return redirect(url_for('admin_dashboard'))
 
     # Add the new permission
@@ -547,9 +555,11 @@ def add_permission():
     try:
         db.session.commit()
         flash('Permission added successfully!', 'success')
+        return redirect(url_for('admin_dashboard'))  # Success case
     except Exception as e:
         db.session.rollback()
         flash(f'Failed to add permission: {e}', 'error')
+        return redirect(url_for('admin_dashboard'))  # Failure case
 
 @app.route('/get_permission_data/<int:permission_id>', methods=['GET'])
 @login_required
@@ -594,6 +604,26 @@ def update_permission():
     else:
         flash('Permission not found.', 'error')
         return jsonify(success=False, error="Permission not found"), 404
+    
+@app.route('/delete_permission/<int:permission_id>', methods=['DELETE'])
+@login_required
+@super_admin_required
+def delete_permission(permission_id):
+    permission = Permission.query.get(permission_id)
+    if not permission:
+        flash('Permission not found.', 'error')
+        return jsonify(success=False, error="Permission not found"), 404
+
+    try:
+        db.session.delete(permission)
+        db.session.commit()
+        flash('Permission successfully deleted.', 'success')
+        return jsonify(success=True)
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Failed to delete permission: {e}', 'error')
+        return jsonify(success=False, error="Failed to delete permission."), 500
+
 
 @app.route('/logout')
 @login_required
