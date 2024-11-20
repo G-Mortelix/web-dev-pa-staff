@@ -7,8 +7,8 @@ from sqlalchemy import case, ForeignKey
 from sqlalchemy.orm import relationship
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
+from flask import Flask, render_template, redirect, url_for, request, flash, jsonify, session, abort
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
-from flask import Flask, render_template, redirect, url_for, request, flash, jsonify, session, abort, send_from_directory
 
 load_dotenv()
 
@@ -109,9 +109,10 @@ def login():
         user = User.query.filter_by(username=username).first()
         if user and check_password_hash(user.password_hash, password):
             login_user(user)
+            flash('Login successful!', 'success')
             return redirect(url_for('home'))
         else:
-            flash('Invalid credentials. Please try again.')
+            flash('Invalid credentials. Please try again.', 'error')
     return render_template('login.html')
 
 @app.route('/home')
@@ -395,19 +396,19 @@ def delete_pdf():
 def add_department():
     dept_name = request.form['dept_name'].strip()
     if not dept_name:
-        flash('Department name cannot be empty.')
+        flash('Department name cannot be empty.', 'error')
         return redirect(url_for('admin_dashboard'))
 
     existing_dept = Department.query.filter_by(dept_name=dept_name).first()
     if existing_dept:
-        flash('Department already exists.')
+        flash('Department already exists.', 'error')
         return redirect(url_for('admin_dashboard'))
 
     new_department = Department(dept_name=dept_name)
     db.session.add(new_department)
     db.session.commit()
 
-    flash('Department added successfully!')
+    flash('Department added successfully!', 'success')
     return redirect(url_for('admin_dashboard'))
 
 @app.route('/delete_department', methods=['POST'])
@@ -416,12 +417,12 @@ def add_department():
 def delete_department():
     dept_name = request.form['dept_name'].strip()
     if not dept_name:
-        flash('Please select a department to delete.')
+        flash('Please select a department to delete.', 'error')
         return redirect(url_for('admin_dashboard'))
 
     department = Department.query.filter_by(dept_name=dept_name).first()
     if not department:
-        flash('Department not found.')
+        flash('Department not found.', 'error')
         return redirect(url_for('admin_dashboard'))
 
     try:
@@ -446,12 +447,13 @@ def delete_department():
         # Delete the department itself
         db.session.delete(department)
         db.session.commit()
-        flash('Department and all associated data deleted successfully!')
+        flash('Department and all associated data deleted successfully!', 'success')
         return redirect(url_for('admin_dashboard'))
     except Exception as e:
         db.session.rollback()
-        flash(f'Error while deleting department: {e}')
-        return redirect(url_for('admin_dashboard'))
+        flash(f'Error while deleting department: {e}', 'error')
+
+    return redirect(url_for('admin_dashboard'))
 
 @app.route('/register', methods=['GET', 'POST'], endpoint='register_user')
 @super_admin_required
@@ -469,7 +471,7 @@ def register_user():
         # Check if the username is already taken
         existing_user = User.query.filter_by(username=username).first()
         if existing_user:
-            flash('Username already taken. Please choose a different one.')
+            flash('Username already taken. Please choose a different one.', 'error')
             return redirect(url_for('register_user'))
 
         # Hash the password
@@ -480,7 +482,7 @@ def register_user():
         db.session.add(new_user)
         db.session.commit()
         
-        flash('User registered successfully!')
+        flash('User registered successfully!', 'success')
         return redirect(url_for('admin_dashboard'))
     
     return render_template('admin_dashboard.html', roles=roles, departments=departments)
@@ -492,7 +494,8 @@ def delete_user(user_id):
     try:
         user = User.query.get(user_id)
         if not user:
-            return jsonify(success=False, error="User not found."), 404
+            flash("User not found.", "error")
+            return redirect(url_for('admin_dashboard'))
 
         # Check for associated records in other tables (e.g., permissions)
         Permission.query.filter_by(user_id=user_id).delete(synchronize_session=False)
@@ -502,11 +505,10 @@ def delete_user(user_id):
         db.session.commit()
         return jsonify(success=True)
     except Exception as e:
-        # Log the error for debugging
-        print(f"Error while deleting user {user_id}: {e}")
         db.session.rollback()
-        return jsonify(success=False, error="Failed to delete user. Please check the logs for details."), 500
+        flash(f"Error while deleting user: {e}", "error")
 
+    return redirect(url_for('admin_dashboard'))
 
 @app.route('/add_permission', methods=['POST'])
 @login_required
@@ -518,18 +520,21 @@ def add_permission():
     delete_permission = request.form.get('delete_permission') == '1'
 
     if not user_id or not dept_id:
-        return jsonify(success=False, error="User ID and Department ID are required."), 400
+        flash('User ID and Department ID are required.', 'error')
+        return redirect(url_for('admin_dashboard'))
     
     existing_permission = Permission.query.filter_by(user_id=user_id, dept_id=dept_id).first()
     if existing_permission:
-        return jsonify(success=False, error="Permission already exists for this user and department."), 400
+        flash('Permission already exists for this user and department.', 'error')
+        return redirect(url_for('admin_dashboard'))
 
     # Check if the user and department exist
     user = User.query.get(user_id)
     department = Department.query.get(dept_id)
 
     if not user or not department:
-        return jsonify(success=False, error="Invalid user or department."), 400
+        flash('Invalid user or department.', 'error')
+        return redirect(url_for('admin_dashboard'))
 
     # Add the new permission
     new_permission = Permission(
@@ -541,12 +546,10 @@ def add_permission():
     db.session.add(new_permission)
     try:
         db.session.commit()
-        print("Permission successfully added.")
-        return jsonify(success=True, message="Permission added successfully.")
+        flash('Permission added successfully!', 'success')
     except Exception as e:
-        print("Error while adding permission:", e)
         db.session.rollback()
-        return jsonify(success=False, error="Failed to add permission."), 500
+        flash(f'Failed to add permission: {e}', 'error')
 
 @app.route('/get_permission_data/<int:permission_id>', methods=['GET'])
 @login_required
@@ -559,6 +562,8 @@ def get_permission_data(permission_id):
             'write_permission': permission.write_permission,
             'delete_permission': permission.delete_permission
         })
+    
+    flash('Permission not found.', 'error')
     return jsonify({'error': 'Permission not found'}), 404
 
 @app.route('/update_permission', methods=['POST'])
@@ -580,21 +585,21 @@ def update_permission():
         permission.delete_permission = delete_permission
         try:
             db.session.commit()
-            print("Permission successfully updated.")
+            flash('Permission successfully updated.', 'success')
             return jsonify(success=True)
         except Exception as e:
-            print("Error while updating permission:", e)
             db.session.rollback()
+            flash(f'Failed to update permission: {e}', 'error')
             return jsonify(success=False, error="Failed to update permission."), 500
     else:
-        print("Permission not found.")
+        flash('Permission not found.', 'error')
         return jsonify(success=False, error="Permission not found"), 404
 
 @app.route('/logout')
 @login_required
 def logout():
     logout_user()
-    flash('You have been logged out successfully.')
+    flash('You have been logged out successfully.', 'success')
     return redirect(url_for('login'))
 
 if __name__ == '__main__':

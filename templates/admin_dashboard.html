@@ -29,6 +29,18 @@
         </aside>
 
         <main class="dashboard-tabs">
+            {% with messages = get_flashed_messages(with_categories=True) %}
+                {% if messages %}
+                    <div class="flash-messages">
+                        {% for category, message in messages %}
+                            <div class="flash-message {{ category }}">
+                                {{ message }}
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            {% endwith %}
+            
             <!-- Manage Users Section -->
             <div id="manageUsersSection" class="admin-section">
                 <h2>Manage Users</h2>
@@ -46,10 +58,13 @@
                         <label for="username">Username:</label>
                         <input type="text" id="username" name="username" required>
                 
-                        <label for="password">Password:</label>
                         <div class="password-container">
                             <input type="password" id="register-password" name="password" required>
-                            <span class="toggle-password" onclick="togglePasswordVisibility('register-password')">👁️</span>
+                            <img src="{{ url_for('static', filename='icons/eye-crossed.png') }}" 
+                                alt="Toggle Password Visibility" 
+                                id="toggle-register-password" 
+                                class="toggle-password" 
+                                onclick="togglePasswordVisibility('register-password', 'toggle-register-password')">
                         </div>
                 
                         <label for="role">Role:</label>
@@ -208,13 +223,16 @@
     </div>
 
     <script>
-
-        function togglePasswordVisibility(inputId) {
+        function togglePasswordVisibility(inputId, iconId) {
             const passwordInput = document.getElementById(inputId);
+            const toggleIcon = document.getElementById(iconId);
+
             if (passwordInput.type === "password") {
                 passwordInput.type = "text";
+                toggleIcon.src = "{{ url_for('static', filename='icons/eye-open.png') }}"; // Switch to "eye open" icon
             } else {
                 passwordInput.type = "password";
+                toggleIcon.src = "{{ url_for('static', filename='icons/eye-crossed.png') }}"; // Switch to "eye crossed" icon
             }
         }
         

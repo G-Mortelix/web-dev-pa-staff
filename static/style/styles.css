@@ -72,14 +72,22 @@ body {
     background-color: #0056b3;
 }
 
-/* login flash message */
-.login-page .flash-message {
+.flash-message {
+    margin: 10px 0;
     padding: 10px;
-    color: #b30000;
-    margin-top: 15px;
-    border-radius: 4px;
-    background-color: #ffcccc;
-    border: 1px solid #ff6666;
+    border-radius: 5px;
+}
+
+.flash-message.success {
+    color: #155724;
+    background-color: #d4edda;
+    border-color: #c3e6cb;
+}
+
+.flash-message.error {
+    color: #721c24;
+    background-color: #f8d7da;
+    border-color: #f5c6cb;
 }
 
 .password-container {
@@ -92,7 +100,18 @@ body {
     top: 50%;
     transform: translateY(-50%);
     cursor: pointer;
-    font-size: 0.9rem;
+    width: 20px;
+    height: 20px;
+}
+
+#registerUserForm .toggle-password {
+    position: absolute;
+    right: 10px;
+    top: 35%;
+    transform: translateY(-50%);
+    cursor: pointer;
+    width: 20px;
+    height: 20px;
 }
 
 /* header in index */
@@ -433,7 +452,6 @@ body.admin-dashboard {
 .dashboard-tabs {
     flex: 1;
     width: 100%;
-    display: flex;
     padding: 20px;
     font-size: 1rem;
     max-width: 800px;

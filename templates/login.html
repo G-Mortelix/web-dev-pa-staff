@@ -10,7 +10,11 @@
         <input type="text" name="username" placeholder="Username" required>
         <div class="password-container">
             <input type="password" id="login-password" name="password" placeholder="Password" required>
-            <span class="toggle-password" onclick="togglePasswordVisibility('login-password')">👁️</span>
+            <img src="{{ url_for('static', filename='icons/eye-crossed.png') }}" 
+                alt="Toggle Password Visibility" 
+                id="toggle-login-password" 
+                class="toggle-password" 
+                onclick="togglePasswordVisibility('login-password', 'toggle-login-password')">
         </div>
         <button type="submit">Login</button>
     </form>
@@ -23,13 +27,18 @@
             </div>
         {% endif %}
     {% endwith %}
+    
     <script>
-        function togglePasswordVisibility(inputId) {
+        function togglePasswordVisibility(inputId, iconId) {
             const passwordInput = document.getElementById(inputId);
+            const toggleIcon = document.getElementById(iconId);
+
             if (passwordInput.type === "password") {
                 passwordInput.type = "text";
+                toggleIcon.src = "{{ url_for('static', filename='icons/eye-open.png') }}"; // Switch to "eye open" icon
             } else {
                 passwordInput.type = "password";
+                toggleIcon.src = "{{ url_for('static', filename='icons/eye-crossed.png') }}"; // Switch to "eye crossed" icon
             }
         }
     </script>
