@@ -1,0 +1,76 @@
+tba_functions
+
+1. Add Subfolders
+  - It's definitely possible to add subfolders.  
+  - Unlimited nesting: More complex in terms of UI and database structure since recursive logic is needed for folder traversal and rendering.  
+  - Limited nesting (e.g., up to 5 levels): Easier to implement and maintain, as it avoids overly complex structures.
+
+- Suggestions/Improvements:
+  - Limit the nesting level (e.g., 5 levels) to balance flexibility and simplicity.  
+  - Maintain the numbering system for subfolders (e.g., `1.0` -> `1.0.1` -> `1.0.1.1`).  
+  - Add parent-folder tracking to the database (e.g., `parent_folder_id` field in the `Folder` table).  
+  - Update UI to show a collapsible folder hierarchy.
+
+---
+
+2. Add Master Admin Role
+  - Fully possible by adding a `role_hierarchy` or `role_level` field to differentiate roles (e.g., `master_admin`, `admin`, `user`).  
+  - Authorization checks for `master_admin` and `admin` can be managed using decorators or middleware.
+
+- Suggestions/Improvements 
+  - Master admins should have a unique dashboard or explicit actions to manage admins.  
+  - Allow fine-grained permissions for future scalability (e.g., toggling which specific tasks an admin can perform).
+
+---
+
+3. Multi-Department Access for Users
+  - Absolutely possible by allowing a user to be associated with multiple departments in the database (e.g., using a `UserDepartment` association table).  
+
+- Suggestions/Improvements: 
+  - Admins should manage multi-department access via a UI (e.g., checkboxes or multi-select dropdown).  
+  - Update permission checks to allow actions across all assigned departments.  
+  - Users accessing multiple departments should still see a clear separation of departments in the UI (e.g., grouped by department).
+
+---
+
+4. Admin Edit User Details 
+  - Straightforward to implement by allowing admin access to modify users' username and department assignments.  
+  - Tied to the multi-department access feature above.
+
+- Suggestions/Improvements: 
+  - Include validation checks to prevent username duplication.  
+  - Use modals or forms for editing user details on the admin dashboard.
+
+---
+
+5. Logbook for Audit
+- **Feasibility:**  
+  - Very feasible and can be achieved by maintaining a log table in the database.  
+  - Each entry can track user ID, action, timestamp, and other relevant details.  
+
+- Suggestions/Improvements:
+  - Include logging for critical actions:
+    - User login/logout.
+    - File uploads/deletions.
+    - Permission changes.
+    - Folder creations/renames.
+  - Logs should be accessible only to master admins (and optionally regular admins).  
+  - Consider pagination and search filters for better usability in the logbook.
+
+---
+
+Implementation Order & Suggestions
+1. Start with Multi-Department Access (Requirement 3):
+   - It requires structural changes to the database, which will affect many other features (e.g., editing user details, permissions).
+
+2. Add Master Admin Role (Requirement 2):
+   - Role differentiation will allow segregation of actions, especially for requirements like logbook access.
+
+3. Integrate Subfolder Support (Requirement 1):
+   - Once roles and multi-department access are in place, subfolder nesting can be implemented with hierarchical folder structures.
+
+4. Enable Admin to Edit User Details (Requirement 4):
+   - Build on the multi-department structure to allow dynamic updates to user details.
+
+5. Logbook for Audit (Requirement 5):
+   - Integrate logging into existing actions and build the logbook interface.

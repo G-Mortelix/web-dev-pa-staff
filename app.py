@@ -56,6 +56,16 @@ class Department(db.Model):
 
     permissions = db.relationship("Permission", back_populates="department")
 
+class UserDepartment(db.Model):
+    __tablename__ = 'user_department'
+    user_id = db.Column(db.Integer, db.ForeignKey('users.user_id', ondelete="CASCADE"), primary_key=True)
+    dept_id = db.Column(db.Integer, db.ForeignKey('departments.dept_id', ondelete="CASCADE"), primary_key=True)
+
+    # Relationships for convenience
+    user = db.relationship('User', backref=db.backref('user_departments', cascade="all, delete-orphan"))
+    department = db.relationship('Department', backref=db.backref('user_departments', cascade="all, delete-orphan"))
+
+
 class Folder(db.Model):
     __tablename__ = 'folders'
     folder_id = db.Column(db.Integer, primary_key=True)
@@ -124,13 +134,13 @@ def home():
     user_permissions = Permission.query.filter_by(user_id=current_user.user_id).all()
 
     # Map user permissions
-    user_permission_map = {
-        perm.dept_id: {
-            'write': perm.write_permission,
-            'delete': perm.delete_permission
-        }
-        for perm in user_permissions
-    }
+    user_permission_map = {}
+    for perm in user_permissions:
+        if perm.dept_id not in user_permission_map:
+            user_permission_map[perm.dept_id] = {'write': False, 'delete': False}
+        user_permission_map[perm.dept_id]['write'] |= perm.write_permission
+        user_permission_map[perm.dept_id]['delete'] |= perm.delete_permission
+
 
     # Add default permissions for departments without explicit permissions
     default_permissions = {
@@ -140,13 +150,12 @@ def home():
     permissions = {**default_permissions, **user_permission_map}
 
     if current_user.role_id == 1:  # Admin can view all folders
-        departments = Department.query.order_by(
-            case((Department.dept_name == "General", 0), else_=1)
-        ).all()
+        departments = Department.query.all()
     else:
-        departments = Department.query.filter(
-            (Department.dept_id == current_user.dept_id) | (Department.dept_id == 4)
-        ).order_by(case((Department.dept_name == "General", 0), else_=1)).all()
+        user_departments = [ud.dept_id for ud in current_user.user_departments]
+        # Always include the "General" department (assuming dept_id = 4)
+        departments = Department.query.filter(Department.dept_id.in_(user_departments + [4])).all()
+
 
     for department in departments:
         folders = Folder.query.filter_by(dept_id=department.dept_id).all()
@@ -179,10 +188,13 @@ def admin_dashboard():
     departments = Department.query.all()
     permissions = Permission.query.all()
     users = User.query.filter(User.role_id != 1).all()
+
+    departments_serialized = [{"dept_id": dept.dept_id, "dept_name": dept.dept_name} for dept in departments]
+
     return render_template(
         'admin_dashboard.html',
         roles=roles,
-        departments=departments,
+        departments=departments_serialized,
         permissions=permissions,
         users=users
     )
@@ -228,7 +240,6 @@ def sanitize_folder_name(name):
     # Replace invalid characters with an underscore
     sanitized_name = re.sub(r'[<>:"/\\|?*]', "_", name)
     return sanitized_name.strip()  # Remove leading and trailing whitespace
-
 
 @app.route('/edit_folder', methods=['POST'])
 @login_required
@@ -466,26 +477,105 @@ def register_user():
         username = request.form['username']
         password = request.form['password']
         role_id = request.form.get('role_id')
-        dept_id = request.form.get('dept_id') or None
+        dept_ids = request.form.getlist('dept_ids')  # Get list of selected department IDs
         
+        # Validate inputs
+        if not username or not password or not role_id:
+            flash('All fields are required.', 'error')
+            return redirect(url_for('register_user'))
+
         # Check if the username is already taken
         existing_user = User.query.filter_by(username=username).first()
         if existing_user:
             flash('Username already taken. Please choose a different one.', 'error')
             return redirect(url_for('register_user'))
 
+        if len(dept_ids) > 4:  # Limit departments to 4
+            flash('A user cannot be assigned to more than 4 departments.', 'error')
+            return redirect(url_for('register_user'))
+
         # Hash the password
         hashed_password = generate_password_hash(password)
 
-        # Create a new user with the hashed password
-        new_user = User(username=username, password_hash=hashed_password, role_id=role_id, dept_id=dept_id) 
+        primary_dept_id = int(dept_ids[0]) if dept_ids else None  # First selected dept as primary
+        new_user = User(username=username, password_hash=hashed_password, role_id=role_id, dept_id=primary_dept_id)
         db.session.add(new_user)
+        db.session.flush()  # Flush to get the user_id
+
+        if dept_ids:
+            valid_departments = [dept.dept_id for dept in departments]
+            for dept_id in dept_ids:
+                if int(dept_id) not in valid_departments:
+                    flash('Invalid department selected.', 'error')
+                    return redirect(url_for('register_user'))
+                user_department = UserDepartment(user_id=new_user.user_id, dept_id=int(dept_id))
+                db.session.add(user_department)
+
         db.session.commit()
-        
         flash('User registered successfully!', 'success')
         return redirect(url_for('admin_dashboard'))
     
     return render_template('admin_dashboard.html', roles=roles, departments=departments)
+
+@app.route('/edit_user/<int:user_id>', methods=['GET', 'POST'])
+@login_required
+@super_admin_required
+def edit_user(user_id):
+    user = User.query.get_or_404(user_id)
+    departments = Department.query.all()
+    roles = Role.query.all()
+
+    if request.method == 'POST':
+        username = request.form['username']
+        role_id = request.form.get('role_id')
+        dept_ids = request.form.getlist('dept_ids')  # Get selected department IDs
+
+        # Check if the username is already taken by another user
+        existing_user = User.query.filter(User.username == username, User.user_id != user_id).first()
+        if existing_user:
+            flash(f"Username '{username}' is already taken by another user.", 'error')
+            return redirect(url_for('admin_dashboard'))
+        
+        # Validate inputs
+        if not dept_ids:
+            flash('At least one department must be assigned.', 'error')
+            return redirect(url_for('admin_dashboard'))
+
+        if len(dept_ids) > 4:
+            flash('A user cannot be assigned to more than 4 departments.', 'error')
+            return redirect(url_for('admin_dashboard'))
+
+        # Update username and role
+        user.username = username
+        user.role_id = int(role_id)
+
+        # Clear and reassign departments
+        UserDepartment.query.filter_by(user_id=user.user_id).delete()
+        for dept_id in dept_ids:
+            user_department = UserDepartment(user_id=user.user_id, dept_id=int(dept_id))
+            db.session.add(user_department)
+
+        # Update the user's primary department (users.dept_id) to the first selected department
+        user.dept_id = int(dept_ids[0])
+        
+        db.session.commit()
+        flash(f"User '{username}' updated successfully!", 'success')
+        return redirect(url_for('admin_dashboard'))
+
+    return render_template('admin_dashboard.html', user=user, departments=departments, roles=roles)
+
+
+@app.route('/get_user_data/<int:user_id>', methods=['GET'])
+@login_required
+@super_admin_required
+def get_user_data(user_id):
+    user = User.query.get_or_404(user_id)
+    departments = [ud.dept_id for ud in user.user_departments]
+    return jsonify({
+        "username": user.username,
+        "role_id": user.role_id,
+        "departments": departments
+    })
 
 @app.route('/delete_user/<int:user_id>', methods=['POST'])
 @login_required

@@ -286,13 +286,9 @@ header {
 }
 
 .resizer {
-    width: 5px;
+    width: 8px;
     cursor: ew-resize;
-    background: #ddd;
     height: 100vh;
-    position: absolute;
-    right: 0; /* Align to the right edge of the sidebar */
-    top: 0;
 }
 
 /* dept layout */

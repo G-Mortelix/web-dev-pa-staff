@@ -74,14 +74,15 @@
                             {% endfor %}
                         </select>
                 
-                        <label for="department" id="department-label">Department:</label>
-                        <select id="department" name="dept_id">
-                            <option value="" class="no-dept-option" style="display: none;">No Department</option>
-                            {% for department in departments %}
-                                <option value="{{ department.dept_id }}">{{ department.dept_name }}</option>
-                            {% endfor %}
-                        </select>
-                
+                        <label for="departments">Departments:</label>
+                        <div id="dept-container">
+                            <select id="dept-1" name="dept_ids" class="dept-dropdown">
+                                {% for department in departments %}
+                                    <option value="{{ department.dept_id }}">{{ department.dept_name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <button type="button" id="add-dept-btn" onclick="addDept()">Add More Department</button>
                         <button type="submit" class="form-submit">Register</button>
                     </form>
                     <button type="button" onclick="backToManageUsers()">Back</button>
@@ -101,12 +102,51 @@
                             <tr>
                                 <td>{{ user.username }}</td>
                                 <td>{{ user.role.role_name }}</td>
-                                <td>{{ user.department.dept_name }}</td>
-                                <td><button onclick="deleteUser('{{ user.user_id }}')">Delete</button></td>
+                                <td>
+                                    {% for ud in user.user_departments %}
+                                        {{ ud.department.dept_name }}{% if not loop.last %}, {% endif %}
+                                    {% endfor %}
+                                    {% if not user.user_departments %}
+                                        {{ user.department.dept_name if user.department else "No Department Assigned" }}
+                                    {% endif %}
+                                </td>
+                                
+                                <td>
+                                    <button onclick="showEditUserForm('{{ user.user_id }}')">Edit</button>
+                                    <button onclick="deleteUser('{{ user.user_id }}')">Delete</button>
+                                </td>
                             </tr>
                         {% endfor %}
                     </table>
                     <button type="button" onclick="backToManageUsers()">Back</button>
+
+                    <div id="editUserForm" style="display: none;">
+                        <h3>Edit User</h3>
+                        <form method="POST" action="{{ url_for('edit_user', user_id=0) }}" id="editUserDynamicForm">
+                            <label for="edit-username">Username:</label>
+                            <input type="text" id="edit-username" name="username" required>
+                            
+                            <label for="edit-role">Role:</label>
+                            <select id="edit-role" name="role_id" required>
+                                {% for role in roles %}
+                                    <option value="{{ role.role_id }}">{{ role.role_name }}</option>
+                                {% endfor %}
+                            </select>
+
+                            <label for="edit-departments">Departments:</label>
+                            <div id="edit-dept-container">
+                                <select id="edit-dept-1" name="dept_ids" class="dept-dropdown">
+                                    {% for department in departments %}
+                                        <option value="{{ department.dept_id }}">{{ department.dept_name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <button type="button" id="edit-add-dept-btn" onclick="addEditDept()">Add More Department</button>
+                            
+                            <button type="submit">Save Changes</button>
+                            <button type="button" onclick="cancelEditUser()">Cancel</button>
+                        </form>
+                    </div>
                 </div>
             </div>
 
@@ -220,10 +260,19 @@
                         <button type="button" onclick="resetManageDept()">Back</button>
                     </form>
                 </div>
+                <label for="departments">Departments:</label>
+                <select id="departments" name="departments" multiple>
+                    {% for department in departments %}
+                        <option value="{{ department.dept_id }}">{{ department.dept_name }}</option>
+                    {% endfor %}
+                </select>
             </div>
         </main>
     </div>
-
+    <script type="application/json" id="departments-data">
+        {{ departments|tojson|safe }}
+    </script>
+    
     <script>
         function togglePasswordVisibility(inputId, iconId) {
             const passwordInput = document.getElementById(inputId);
@@ -285,7 +334,6 @@
         // Ensure it runs on page load
         document.addEventListener("DOMContentLoaded", handleRoleChange);
 
-
         function deleteUser(userId) {
             if (confirm("Are you sure you want to delete this user?")) {
                 fetch(`/delete_user/${userId}`, {
@@ -302,6 +350,127 @@
                 });
             }
         }
+        
+        let deptCount = 1;
+
+        function addDept() {
+            if (deptCount >= 4) {
+                alert("A user cannot be assigned to more than 4 departments.");
+                return;
+            }
+
+            deptCount++;
+            const deptContainer = document.getElementById("dept-container");
+            const newDropdown = document.createElement("select");
+            newDropdown.id = `dept-${deptCount}`;
+            newDropdown.name = "dept_ids";
+            newDropdown.classList.add("dept-dropdown");
+
+            // Populate with department options dynamically from server-side
+            const departments = {{ departments|tojson|safe }}; // Ensure data is passed safely
+            departments.forEach(department => {
+                const option = document.createElement("option");
+                option.value = department.dept_id;
+                option.textContent = department.dept_name;
+                newDropdown.appendChild(option);
+            });
+
+            deptContainer.appendChild(newDropdown);
+        }
+
+        let editDeptCount = 1;
+
+        // Function to add more department dropdowns dynamically
+        function addEditDept() {
+            if (editDeptCount >= 4) {
+                alert("A user cannot be assigned to more than 4 departments.");
+                return;
+            }
+
+            editDeptCount++;
+            const editDeptContainer = document.getElementById("edit-dept-container");
+            const newDropdown = document.createElement("select");
+            newDropdown.id = `edit-dept-${editDeptCount}`;
+            newDropdown.name = "dept_ids";
+            newDropdown.classList.add("dept-dropdown");
+
+            // Populate dropdown with department options
+            const departments = JSON.parse(document.getElementById("departments-data").textContent);
+            departments.forEach(department => {
+                const option = document.createElement("option");
+                option.value = department.dept_id;
+                option.textContent = department.dept_name;
+                newDropdown.appendChild(option);
+            });
+
+            editDeptContainer.appendChild(newDropdown);
+        }
+
+        // Function to fetch user data and populate edit form
+        function showEditUserForm(userId) {
+            const editUserForm = document.getElementById("editUserForm");
+            const editUserDynamicForm = document.getElementById("editUserDynamicForm");
+
+            // Reset department dropdowns
+            document.getElementById("edit-dept-container").innerHTML = `
+                <select id="edit-dept-1" name="dept_ids" class="dept-dropdown"></select>
+            `;
+            editDeptCount = 1;
+
+            // Populate the form action dynamically
+            editUserDynamicForm.action = `/edit_user/${userId}`;
+
+            // Fetch user details via an AJAX call
+            fetch(`/get_user_data/${userId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        alert(data.error);
+                        return;
+                    }
+
+                    // Populate the form fields
+                    document.getElementById("edit-username").value = data.username;
+                    document.getElementById("edit-role").value = data.role_id;
+
+                    // Populate the first department dropdown
+                    const deptSelect = document.getElementById("edit-dept-1");
+                    const departments = JSON.parse(document.getElementById("departments-data").textContent);
+                    departments.forEach(department => {
+                        const option = document.createElement("option");
+                        option.value = department.dept_id;
+                        option.textContent = department.dept_name;
+                        option.selected = data.departments.includes(department.dept_id);
+                        deptSelect.appendChild(option);
+                    });
+
+                    // Populate additional department dropdowns
+                    data.departments.slice(1).forEach(deptId => {
+                        addEditDept();
+                        const newDropdown = document.getElementById(`edit-dept-${editDeptCount}`);
+                        departments.forEach(department => {
+                            const option = document.createElement("option");
+                            option.value = department.dept_id;
+                            option.textContent = department.dept_name;
+                            option.selected = deptId === department.dept_id;
+                            newDropdown.appendChild(option);
+                        });
+                    });
+
+                    // Show the form
+                    editUserForm.style.display = "block";
+                })
+                .catch(error => {
+                    console.error("Error fetching user data:", error);
+                });
+        }
+
+        // Cancel edit user action
+        function cancelEditUser() {
+            document.getElementById("editUserForm").style.display = "none";
+        }
+
+
         function showAddPermissionForm() {
             document.getElementById('addPermissionForm').style.display = 'block';
             document.getElementById('managePermissionsTable').style.display = 'none';
