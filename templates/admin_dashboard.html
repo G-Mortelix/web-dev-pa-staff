@@ -134,14 +134,11 @@
                             </select>
 
                             <label for="edit-departments">Departments:</label>
-                            <div id="edit-dept-container">
-                                <select id="edit-dept-1" name="dept_ids" class="dept-dropdown">
-                                    {% for department in departments %}
-                                        <option value="{{ department.dept_id }}">{{ department.dept_name }}</option>
-                                    {% endfor %}
-                                </select>
+                            <div id="dept-container">
+                                <select id="dept-1" name="dept_ids" class="dept-dropdown"></select>
                             </div>
-                            <button type="button" id="edit-add-dept-btn" onclick="addEditDept()">Add More Department</button>
+                            <button type="button" id="add-dept-btn" onclick="addDept()">Add More Department</button>
+                            
                             
                             <button type="submit">Save Changes</button>
                             <button type="button" onclick="cancelEditUser()">Cancel</button>
@@ -260,12 +257,6 @@
                         <button type="button" onclick="resetManageDept()">Back</button>
                     </form>
                 </div>
-                <label for="departments">Departments:</label>
-                <select id="departments" name="departments" multiple>
-                    {% for department in departments %}
-                        <option value="{{ department.dept_id }}">{{ department.dept_name }}</option>
-                    {% endfor %}
-                </select>
             </div>
         </main>
     </div>
@@ -350,8 +341,31 @@
                 });
             }
         }
-        
-        let deptCount = 1;
+        let deptCount = 1; // Tracks the number of department dropdowns
+
+        function initializeDeptDropdown(dropdownElement, selectedDeptIds = []) {
+            // Fetch all departments from the JSON data
+            const departments = JSON.parse(document.getElementById("departments-data").textContent);
+
+            // Clear the dropdown
+            dropdownElement.innerHTML = "";
+
+            // Add the dummy department at the top
+            const dummyOption = document.createElement("option");
+            dummyOption.value = "";
+            dummyOption.textContent = "-- Select Department --";
+            dropdownElement.appendChild(dummyOption);
+
+            // Populate with departments that are not already selected
+            departments.forEach(department => {
+                if (!selectedDeptIds.includes(department.dept_id.toString())) {
+                    const option = document.createElement("option");
+                    option.value = department.dept_id;
+                    option.textContent = department.dept_name;
+                    dropdownElement.appendChild(option);
+                }
+            });
+        }
 
         function addDept() {
             if (deptCount >= 4) {
@@ -360,115 +374,141 @@
             }
 
             deptCount++;
+
+            // Get the container for adding dropdowns
             const deptContainer = document.getElementById("dept-container");
+
+            // Create a new dropdown
             const newDropdown = document.createElement("select");
             newDropdown.id = `dept-${deptCount}`;
             newDropdown.name = "dept_ids";
             newDropdown.classList.add("dept-dropdown");
 
-            // Populate with department options dynamically from server-side
-            const departments = {{ departments|tojson|safe }}; // Ensure data is passed safely
-            departments.forEach(department => {
-                const option = document.createElement("option");
-                option.value = department.dept_id;
-                option.textContent = department.dept_name;
-                newDropdown.appendChild(option);
-            });
+            // Fetch selected department IDs
+            const selectedDeptIds = Array.from(
+                document.querySelectorAll("select[name='dept_ids']")
+            ).map(dropdown => dropdown.value);
 
+            // Initialize the dropdown with available options
+            initializeDeptDropdown(newDropdown, selectedDeptIds);
+
+            // Append the new dropdown to the container
             deptContainer.appendChild(newDropdown);
         }
 
+        // On page load, initialize the first dropdown
+        document.addEventListener("DOMContentLoaded", function() {
+            const firstDropdown = document.getElementById("dept-1");
+            initializeDeptDropdown(firstDropdown);
+        });
+
         let editDeptCount = 1;
 
-        // Function to add more department dropdowns dynamically
-        function addEditDept() {
-            if (editDeptCount >= 4) {
-                alert("A user cannot be assigned to more than 4 departments.");
-                return;
+    // Dummy department
+    const DUMMY_DEPT = { dept_id: 0, dept_name: "-- Select Department --" };
+
+    function addEditDept() {
+        if (editDeptCount >= 4) {
+            alert("A user cannot be assigned to more than 4 departments.");
+            return;
+        }
+
+        editDeptCount++;
+
+        const editDeptContainer = document.getElementById("edit-dept-container");
+        const newDropdown = document.createElement("select");
+        newDropdown.id = `edit-dept-${editDeptCount}`;
+        newDropdown.name = "dept_ids";
+        newDropdown.classList.add("dept-dropdown");
+
+        // Populate dropdown with department options
+        const departments = JSON.parse(document.getElementById("departments-data").textContent);
+
+        departments.forEach(department => {
+            const option = document.createElement("option");
+            option.value = department.dept_id;
+            option.textContent = department.dept_name;
+
+            // Add dummy department at the top and prevent selection
+            if (department.dept_id === DUMMY_DEPT.dept_id) {
+                option.disabled = true;
             }
 
-            editDeptCount++;
-            const editDeptContainer = document.getElementById("edit-dept-container");
-            const newDropdown = document.createElement("select");
-            newDropdown.id = `edit-dept-${editDeptCount}`;
-            newDropdown.name = "dept_ids";
-            newDropdown.classList.add("dept-dropdown");
+            newDropdown.appendChild(option);
+        });
 
-            // Populate dropdown with department options
-            const departments = JSON.parse(document.getElementById("departments-data").textContent);
-            departments.forEach(department => {
-                const option = document.createElement("option");
-                option.value = department.dept_id;
-                option.textContent = department.dept_name;
-                newDropdown.appendChild(option);
-            });
+        editDeptContainer.appendChild(newDropdown);
+    }
 
-            editDeptContainer.appendChild(newDropdown);
-        }
+    function showEditUserForm(userId) {
+        const editUserForm = document.getElementById("editUserForm");
+        const editUserDynamicForm = document.getElementById("editUserDynamicForm");
 
-        // Function to fetch user data and populate edit form
-        function showEditUserForm(userId) {
-            const editUserForm = document.getElementById("editUserForm");
-            const editUserDynamicForm = document.getElementById("editUserDynamicForm");
+        // Reset department dropdowns
+        document.getElementById("edit-dept-container").innerHTML = `
+            <select id="edit-dept-1" name="dept_ids" class="dept-dropdown">
+                <option value="${DUMMY_DEPT.dept_id}" disabled selected>${DUMMY_DEPT.dept_name}</option>
+            </select>
+        `;
+        editDeptCount = 1;
 
-            // Reset department dropdowns
-            document.getElementById("edit-dept-container").innerHTML = `
-                <select id="edit-dept-1" name="dept_ids" class="dept-dropdown"></select>
-            `;
-            editDeptCount = 1;
+        // Populate the form action dynamically
+        editUserDynamicForm.action = `/edit_user/${userId}`;
 
-            // Populate the form action dynamically
-            editUserDynamicForm.action = `/edit_user/${userId}`;
+        // Fetch user details via an AJAX call
+        fetch(`/get_user_data/${userId}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    alert(data.error);
+                    return;
+                }
 
-            // Fetch user details via an AJAX call
-            fetch(`/get_user_data/${userId}`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.error) {
-                        alert(data.error);
-                        return;
-                    }
+                // Populate the form fields
+                document.getElementById("edit-username").value = data.username;
+                document.getElementById("edit-role").value = data.role_id;
 
-                    // Populate the form fields
-                    document.getElementById("edit-username").value = data.username;
-                    document.getElementById("edit-role").value = data.role_id;
+                // Populate the first department dropdown
+                const deptSelect = document.getElementById("edit-dept-1");
+                const departments = JSON.parse(document.getElementById("departments-data").textContent);
 
-                    // Populate the first department dropdown
-                    const deptSelect = document.getElementById("edit-dept-1");
-                    const departments = JSON.parse(document.getElementById("departments-data").textContent);
-                    departments.forEach(department => {
+                // Exclude departments already assigned to the user
+                const remainingDepts = departments.filter(dept => !data.departments.includes(dept.dept_id));
+
+                // Add current user departments to the top
+                data.departments.forEach(deptId => {
+                    const userDept = departments.find(dept => dept.dept_id === deptId);
+                    if (userDept) {
                         const option = document.createElement("option");
-                        option.value = department.dept_id;
-                        option.textContent = department.dept_name;
-                        option.selected = data.departments.includes(department.dept_id);
+                        option.value = userDept.dept_id;
+                        option.textContent = userDept.dept_name;
+                        option.selected = true;
                         deptSelect.appendChild(option);
-                    });
-
-                    // Populate additional department dropdowns
-                    data.departments.slice(1).forEach(deptId => {
-                        addEditDept();
-                        const newDropdown = document.getElementById(`edit-dept-${editDeptCount}`);
-                        departments.forEach(department => {
-                            const option = document.createElement("option");
-                            option.value = department.dept_id;
-                            option.textContent = department.dept_name;
-                            option.selected = deptId === department.dept_id;
-                            newDropdown.appendChild(option);
-                        });
-                    });
-
-                    // Show the form
-                    editUserForm.style.display = "block";
-                })
-                .catch(error => {
-                    console.error("Error fetching user data:", error);
+                    }
                 });
-        }
 
-        // Cancel edit user action
-        function cancelEditUser() {
-            document.getElementById("editUserForm").style.display = "none";
-        }
+                // Populate the remaining departments (after dummy)
+                remainingDepts.forEach(department => {
+                    const option = document.createElement("option");
+                    option.value = department.dept_id;
+                    option.textContent = department.dept_name;
+                    deptSelect.appendChild(option);
+                });
+
+                // Allow adding additional departments
+                data.departments.slice(1).forEach(() => addEditDept());
+
+                // Show the form
+                editUserForm.style.display = "block";
+            })
+            .catch(error => {
+                console.error("Error fetching user data:", error);
+            });
+    }
+
+    function cancelEditUser() {
+        document.getElementById("editUserForm").style.display = "none";
+    }
 
 
         function showAddPermissionForm() {

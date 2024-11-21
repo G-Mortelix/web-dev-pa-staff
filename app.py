@@ -488,11 +488,11 @@ def register_user():
         existing_user = User.query.filter_by(username=username).first()
         if existing_user:
             flash('Username already taken. Please choose a different one.', 'error')
-            return redirect(url_for('register_user'))
+            return redirect(url_for('admin_dashboard'))  # Redirect back to admin dashboard
 
         if len(dept_ids) > 4:  # Limit departments to 4
             flash('A user cannot be assigned to more than 4 departments.', 'error')
-            return redirect(url_for('register_user'))
+            return redirect(url_for('admin_dashboard'))
 
         # Hash the password
         hashed_password = generate_password_hash(password)
@@ -507,15 +507,16 @@ def register_user():
             for dept_id in dept_ids:
                 if int(dept_id) not in valid_departments:
                     flash('Invalid department selected.', 'error')
-                    return redirect(url_for('register_user'))
+                    return redirect(url_for('admin_dashboard'))
                 user_department = UserDepartment(user_id=new_user.user_id, dept_id=int(dept_id))
                 db.session.add(user_department)
 
         db.session.commit()
         flash('User registered successfully!', 'success')
         return redirect(url_for('admin_dashboard'))
-    
+
     return render_template('admin_dashboard.html', roles=roles, departments=departments)
+
 
 @app.route('/edit_user/<int:user_id>', methods=['GET', 'POST'])
 @login_required
@@ -535,7 +536,7 @@ def edit_user(user_id):
         if existing_user:
             flash(f"Username '{username}' is already taken by another user.", 'error')
             return redirect(url_for('admin_dashboard'))
-        
+
         # Validate inputs
         if not dept_ids:
             flash('At least one department must be assigned.', 'error')
@@ -564,18 +565,25 @@ def edit_user(user_id):
 
     return render_template('admin_dashboard.html', user=user, departments=departments, roles=roles)
 
-
 @app.route('/get_user_data/<int:user_id>', methods=['GET'])
 @login_required
 @super_admin_required
 def get_user_data(user_id):
     user = User.query.get_or_404(user_id)
     departments = [ud.dept_id for ud in user.user_departments]
+
+    # Add a dummy department to JSON data (only for standardization)
+    all_departments = [{"dept_id": 0, "dept_name": "-- Select Department --"}] + [
+        {"dept_id": dept.dept_id, "dept_name": dept.dept_name} for dept in Department.query.all()
+    ]
+
     return jsonify({
         "username": user.username,
         "role_id": user.role_id,
-        "departments": departments
+        "departments": departments,
+        "all_departments": all_departments
     })
+
 
 @app.route('/delete_user/<int:user_id>', methods=['POST'])
 @login_required
