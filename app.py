@@ -68,7 +68,6 @@ class UserDepartment(db.Model):
     user = db.relationship('User', backref=db.backref('user_departments', cascade="all, delete-orphan"))
     department = db.relationship('Department', backref=db.backref('user_departments', cascade="all, delete-orphan"))
 
-
 class Folder(db.Model):
     __tablename__ = 'folders'
     folder_id = db.Column(db.Integer, primary_key=True)
@@ -97,11 +96,26 @@ class Permission(db.Model):
     user = db.relationship("User", backref="permissions")
     department = db.relationship("Department", back_populates="permissions", foreign_keys=[dept_id])
 
+class AuditLog(db.Model):
+    __tablename__ = 'audit_logs'
+    log_id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=True)  # Nullable for anonymous actions
+    action = db.Column(db.String(255), nullable=False)  # Description of the action
+    target_file = db.Column(db.String(255), nullable=True)  # File accessed or manipulated (if applicable)
+    ip_address = db.Column(db.String(50), nullable=True)  # Optional: Store IP for better tracking
+    timestamp = db.Column(db.DateTime, default=db.func.current_timestamp())
+    extra_data = db.Column(db.JSON, nullable=True)  # Store additional data (flexible)
+
+    # Relationships
+    user = db.relationship('User', backref='audit_logs')
+
+    def __repr__(self):
+        return f"<AuditLog(log_id={self.log_id}, user_id={self.user_id}, action='{self.action}', target_file='{self.target_file}', timestamp={self.timestamp})>"
+
 def super_admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        # Check if the current user is logged in and has a 'super-admin' role
-        if not current_user.is_authenticated or current_user.role_id != 1:  
+        if not current_user.is_authenticated or current_user.role_id not in [0, 1]:  # Include master_admin
             abort(403)  # Forbidden access
         return f(*args, **kwargs)
     return decorated_function
@@ -126,6 +140,13 @@ def login():
             return redirect(url_for('home'))
         else:
             flash('Invalid credentials. Please try again.', 'error')
+        
+        if login_successful:
+            new_log = AuditLog(
+                user_id=current_user.user_id,
+                action="Logged in",
+                ip_address=request.remote_addr
+            )
     return render_template('login.html')
 
 # PARTITION FIRST!!!
@@ -213,6 +234,15 @@ def add_folder():
     # Create a new folder entry in the database
     new_folder = Folder(folder_name=folder_name, dept_id=department.dept_id)
     db.session.add(new_folder)
+
+    new_log = AuditLog(
+        user_id=current_user.user_id,
+        action="Created folder",
+        target_file=f"{sanitized_dept_name}/{sanitized_folder_name}",
+        ip_address=request.remote_addr,
+        extra_data={"department": dept_name}
+    )
+    db.session.add(new_log)
     db.session.commit()
 
     # Create the actual folder on the file system
@@ -277,6 +307,18 @@ def edit_folder():
 
             # Update the path in the database
             pdf.pdf_path = new_pdf_path
+        
+        new_log = AuditLog(
+            user_id=current_user.user_id,
+            action="Renamed folder",
+            target_file=f"{sanitized_dept_name}/{old_sanitized_folder_name}",
+            ip_address=request.remote_addr,
+            extra_data={
+                "new_folder_name": new_folder_name,
+                "department": department.dept_name
+            }
+        )
+        db.session.add(new_log)
 
         db.session.commit()
         return jsonify(success=True)
@@ -316,6 +358,17 @@ def upload_pdf():
 
     new_pdf = PDF(folder_id=folder.folder_id, pdf_name=filename, pdf_path=file_path)
     db.session.add(new_pdf)
+
+    # Log the file upload
+    new_log = AuditLog(
+        user_id=current_user.user_id,
+        action="Uploaded file",
+        target_file=file_path,
+        ip_address=request.remote_addr,
+        extra_data={"folder": folder_name, "department": department.dept_name}
+    )
+    db.session.add(new_log)
+
     db.session.commit()
     return jsonify(success=True)
 
@@ -342,6 +395,14 @@ def delete_folder():
     
     # Remove folder from database
     db.session.delete(folder)
+    new_log = AuditLog(
+        user_id=current_user.user_id,
+        action="Deleted folder",
+        target_file=f"{sanitized_dept_name}/{sanitized_folder_name}",
+        ip_address=request.remote_addr,
+        extra_data={"department": department.dept_name}
+    )
+    db.session.add(new_log)
     db.session.commit()
 
     try:
@@ -381,13 +442,25 @@ def delete_pdf():
     pdf_path = os.path.join(app.static_folder, 'pdffile', sanitized_dept_name, sanitized_folder_name, pdf_name)
 
     try:
-        # Delete file and database entry
+        # Delete the file and database entry
         if os.path.exists(pdf_path):
             os.remove(pdf_path)
         db.session.delete(pdf)
+
+        # Log the file deletion
+        new_log = AuditLog(
+            user_id=current_user.user_id,
+            action="Deleted file",
+            target_file=pdf_path,
+            ip_address=request.remote_addr,
+            extra_data={"folder": folder_name, "department": department.dept_name}
+        )
+        db.session.add(new_log)
+
         db.session.commit()
         return jsonify(success=True)
     except Exception as e:
+        db.session.rollback()
         return jsonify(success=False, error=str(e))
 
 
@@ -741,6 +814,75 @@ def delete_department():
         flash(f'Error while deleting department: {e}', 'error')
 
     return redirect(url_for('admin_dashboard'))
+
+# SECTION BREAK!!
+# MASTER ADMIN SECTION
+@app.route('/manage_admins', methods=['POST'])
+@login_required
+@super_admin_required
+def manage_admins():
+    if current_user.role_id != 0:  # Only master_admin
+        abort(403)
+
+    data = request.get_json()
+    user_id = data.get('user_id')
+    action = data.get('action')  # promote/demote
+
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify(success=False, error="User not found.")
+
+    if action == 'promote' and user.role_id != 1:
+        user.role_id = 1
+    elif action == 'demote' and user.role_id == 1 and user.user_id != current_user.user_id:
+        user.role_id = 2  # Default to user role (e.g., `role_id=2`)
+    else:
+        return jsonify(success=False, error="Invalid action or unauthorized.")
+
+    db.session.commit()
+    return jsonify(success=True)
+
+@app.route('/fetch_audit_logs', methods=['GET'])
+@login_required
+@super_admin_required
+def fetch_audit_logs():
+    logs = AuditLog.query.order_by(AuditLog.timestamp.desc()).limit(100).all()
+
+    serialized_logs = [
+        {
+            "user": log.user.username if log.user else "System",
+            "action": log.action,
+            "target_file": log.target_file,
+            "ip_address": log.ip_address,
+            "timestamp": log.timestamp.isoformat() if log.timestamp else None,
+            "extra_data": log.extra_data,
+        }
+        for log in logs
+    ]
+
+    return jsonify(success=True, logs=serialized_logs)
+
+
+
+# SECTION BREAK!!
+# LOG REPORT 
+@app.route('/view_pdf/<int:pdf_id>', methods=['GET'])
+@login_required
+def view_pdf(pdf_id):
+    pdf = PDF.query.get_or_404(pdf_id)
+    
+    # Log the file access
+    new_log = AuditLog(
+        user_id=current_user.user_id,
+        action="Accessed file",
+        target_file=pdf.pdf_path,
+        ip_address=request.remote_addr
+    )
+    db.session.add(new_log)
+    db.session.commit()
+
+    # Return the PDF viewer (existing functionality)
+    return send_file(pdf.pdf_path)
 
 
 # LOGOUT

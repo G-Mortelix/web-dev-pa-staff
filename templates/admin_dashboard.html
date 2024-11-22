@@ -13,6 +13,14 @@
             <h1>Admin Dashboard</h1>
         </div>
         <div class="header-buttons">
+            {% if current_user.role_id == 0 %}
+                <div id="master-admin-actions">
+                    <h2>Master Admin Actions</h2>
+                    <button onclick="manageAdmins()">Manage Admins</button>
+                    <button onclick="viewLogs()">View Logs</button>
+                </div>
+            {% endif %}
+
             <a href="{{ url_for('home') }}" class="dashboard-button">Back</a>
             <a href="{{ url_for('logout') }}" class="logout-button">Logout</a>
         </div>
@@ -25,6 +33,7 @@
                 <li><a href="javascript:void(0)" onclick="toggleSection('manageUsersSection')">Manage User</a></li>
                 <li><a href="javascript:void(0)" onclick="toggleSection('managePermissionsSection')">Manage Permissions</a></li>
                 <li><a href="javascript:void(0)" onclick="toggleSection('manageDepartmentSection')">Manage Department</a></li>
+                <li><a href="javascript:void(0)" onclick="toggleSection('auditLogsSection')">Audit Logs</a></li>
             </ul>
         </aside>
 
@@ -256,6 +265,25 @@
                     </form>
                 </div>
             </div>
+            <!-- Audit Logs Section -->
+            <div id="auditLogsSection" class="admin-section" style="display: none;">
+                <h2>Audit Logs</h2>
+                <table id="auditLogsTable" class="logs-table">
+                    <thead>
+                        <tr>
+                            <th>User</th>
+                            <th>Action</th>
+                            <th>Target</th>
+                            <th>IP Address</th>
+                            <th>Timestamp</th>
+                            <th>Extra Data</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Logs will be dynamically loaded here via JavaScript -->
+                    </tbody>
+                </table>
+            </div>
         </main>
     </div>
     <script type="application/json" id="departments-data">
@@ -275,6 +303,71 @@
                 toggleIcon.src = "{{ url_for('static', filename='icons/eye-crossed.png') }}"; // Switch to "eye crossed" icon
             }
         }
+
+        function manageAdmins() {
+            const userId = prompt("Enter User ID to promote/demote:");
+            const action = confirm("Promote this user to admin?") ? "promote" : "demote";
+
+            fetch('/manage_admins', {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ user_id: userId, action: action })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert("Action performed successfully!");
+                    location.reload();
+                } else {
+                    alert(data.error);
+                }
+            });
+        }
+
+        function toggleSection(sectionId) {
+            document.querySelectorAll('.admin-section').forEach(section => {
+                section.style.display = 'none';
+            });
+            document.getElementById(sectionId).style.display = 'block';
+
+            if (sectionId === 'auditLogsSection') {
+                loadAuditLogs(); // Load logs when the Audit Logs section is opened
+            }
+        }
+
+        function loadAuditLogs() {
+            fetch('/fetch_audit_logs') // Backend route to fetch logs
+                .then(response => response.json())
+                .then(data => {
+                    const tbody = document.querySelector('#auditLogsTable tbody');
+                    tbody.innerHTML = ''; // Clear previous logs
+
+                    if (data.success) {
+                        data.logs.forEach(log => {
+                            const row = document.createElement('tr');
+
+                            row.innerHTML = `
+                                <td>${log.user}</td>
+                                <td>${log.action}</td>
+                                <td>${log.target_file || 'N/A'}</td>
+                                <td>${log.ip_address || 'N/A'}</td>
+                                <td>${new Date(log.timestamp).toLocaleString()}</td>
+                                <td>${JSON.stringify(log.extra_data) || 'N/A'}</td>
+                            `;
+
+                            tbody.appendChild(row);
+                        });
+                    } else {
+                        alert('Failed to load audit logs.');
+                    }
+                })
+                .catch(err => {
+                    console.error('Error loading logs:', err);
+                    alert('Error fetching audit logs. Check the console for details.');
+                });
+        }
+
+
         
         function toggleSection(sectionId) {
             document.querySelectorAll('.admin-section').forEach(section => {
