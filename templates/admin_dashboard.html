@@ -59,6 +59,7 @@
                         <input type="text" id="username" name="username" required>
                 
                         <div class="password-container">
+                            <label>Password:</label>
                             <input type="password" id="register-password" name="password" required>
                             <img src="{{ url_for('static', filename='icons/eye-crossed.png') }}" 
                                 alt="Toggle Password Visibility" 
@@ -110,7 +111,6 @@
                                         {{ user.department.dept_name if user.department else "No Department Assigned" }}
                                     {% endif %}
                                 </td>
-                                
                                 <td>
                                     <button onclick="showEditUserForm('{{ user.user_id }}')">Edit</button>
                                     <button onclick="deleteUser('{{ user.user_id }}')">Delete</button>
@@ -123,27 +123,25 @@
                     <div id="editUserForm" style="display: none;">
                         <h3>Edit User</h3>
                         <form method="POST" action="{{ url_for('edit_user', user_id=0) }}" id="editUserDynamicForm">
-                            <label for="edit-username">Username:</label>
+                            <label for="edit-username" style="margin-bottom: 10px; display: block;">Username:</label>
                             <input type="text" id="edit-username" name="username" required>
                             
-                            <label for="edit-role">Role:</label>
+                            <label for="edit-role" style="margin-bottom: 10px; display: block;">Role:</label>
                             <select id="edit-role" name="role_id" required>
                                 {% for role in roles %}
                                     <option value="{{ role.role_id }}">{{ role.role_name }}</option>
                                 {% endfor %}
                             </select>
-
-                            <label for="edit-departments">Departments:</label>
-                            <div id="dept-container">
-                                <select id="dept-1" name="dept_ids" class="dept-dropdown"></select>
+                    
+                            <label for="edit-departments" style="margin-bottom: 10px; display: block;">Departments:</label>
+                            <div id="edit-dept-container">
+                                <!-- Checkboxes will be dynamically populated here -->
                             </div>
-                            <button type="button" id="add-dept-btn" onclick="addDept()">Add More Department</button>
-                            
                             
                             <button type="submit">Save Changes</button>
                             <button type="button" onclick="cancelEditUser()">Cancel</button>
                         </form>
-                    </div>
+                    </div>                    
                 </div>
             </div>
 
@@ -402,114 +400,64 @@
             initializeDeptDropdown(firstDropdown);
         });
 
-        let editDeptCount = 1;
+        function showEditUserForm(userId) {
+            const editUserForm = document.getElementById("editUserForm");
+            const editUserDynamicForm = document.getElementById("editUserDynamicForm");
 
-    // Dummy department
-    const DUMMY_DEPT = { dept_id: 0, dept_name: "-- Select Department --" };
+            // Reset department container
+            const deptContainer = document.getElementById("edit-dept-container");
+            deptContainer.innerHTML = ""; // Clear previous checkboxes
 
-    function addEditDept() {
-        if (editDeptCount >= 4) {
-            alert("A user cannot be assigned to more than 4 departments.");
-            return;
+            // Fetch user details via an AJAX call
+            fetch(`/get_user_data/${userId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        alert(data.error);
+                        return;
+                    }
+
+                    // Populate username and role
+                    document.getElementById("edit-username").value = data.username;
+                    document.getElementById("edit-role").value = data.role_id;
+
+                    // Create checkboxes for departments
+                    data.all_departments.forEach(department => {
+                        const checkbox = document.createElement("input");
+                        checkbox.type = "checkbox";
+                        checkbox.name = "dept_ids";
+                        checkbox.value = department.dept_id;
+                        checkbox.id = `dept-${department.dept_id}`;
+                        checkbox.style.marginRight = "10px"; // Add styling for spacing
+
+                        // Mark as checked if the department is associated with the user
+                        if (data.departments.includes(department.dept_id)) {
+                            checkbox.checked = true;
+                        }
+
+                        // Create a label for the checkbox
+                        const label = document.createElement("label");
+                        label.htmlFor = `dept-${department.dept_id}`;
+                        label.textContent = department.dept_name;
+                        label.style.marginRight = "20px"; // Add styling for spacing
+
+                        // Append checkbox and label to the container
+                        deptContainer.appendChild(checkbox);
+                        deptContainer.appendChild(label);
+                    });
+
+                    // Show the form
+                    editUserForm.style.display = "block";
+                })
+                .catch(error => {
+                    console.error("Error fetching user data:", error);
+                });
         }
 
-        editDeptCount++;
 
-        const editDeptContainer = document.getElementById("edit-dept-container");
-        const newDropdown = document.createElement("select");
-        newDropdown.id = `edit-dept-${editDeptCount}`;
-        newDropdown.name = "dept_ids";
-        newDropdown.classList.add("dept-dropdown");
-
-        // Populate dropdown with department options
-        const departments = JSON.parse(document.getElementById("departments-data").textContent);
-
-        departments.forEach(department => {
-            const option = document.createElement("option");
-            option.value = department.dept_id;
-            option.textContent = department.dept_name;
-
-            // Add dummy department at the top and prevent selection
-            if (department.dept_id === DUMMY_DEPT.dept_id) {
-                option.disabled = true;
-            }
-
-            newDropdown.appendChild(option);
-        });
-
-        editDeptContainer.appendChild(newDropdown);
-    }
-
-    function showEditUserForm(userId) {
-        const editUserForm = document.getElementById("editUserForm");
-        const editUserDynamicForm = document.getElementById("editUserDynamicForm");
-
-        // Reset department dropdowns
-        document.getElementById("edit-dept-container").innerHTML = `
-            <select id="edit-dept-1" name="dept_ids" class="dept-dropdown">
-                <option value="${DUMMY_DEPT.dept_id}" disabled selected>${DUMMY_DEPT.dept_name}</option>
-            </select>
-        `;
-        editDeptCount = 1;
-
-        // Populate the form action dynamically
-        editUserDynamicForm.action = `/edit_user/${userId}`;
-
-        // Fetch user details via an AJAX call
-        fetch(`/get_user_data/${userId}`)
-            .then(response => response.json())
-            .then(data => {
-                if (data.error) {
-                    alert(data.error);
-                    return;
-                }
-
-                // Populate the form fields
-                document.getElementById("edit-username").value = data.username;
-                document.getElementById("edit-role").value = data.role_id;
-
-                // Populate the first department dropdown
-                const deptSelect = document.getElementById("edit-dept-1");
-                const departments = JSON.parse(document.getElementById("departments-data").textContent);
-
-                // Exclude departments already assigned to the user
-                const remainingDepts = departments.filter(dept => !data.departments.includes(dept.dept_id));
-
-                // Add current user departments to the top
-                data.departments.forEach(deptId => {
-                    const userDept = departments.find(dept => dept.dept_id === deptId);
-                    if (userDept) {
-                        const option = document.createElement("option");
-                        option.value = userDept.dept_id;
-                        option.textContent = userDept.dept_name;
-                        option.selected = true;
-                        deptSelect.appendChild(option);
-                    }
-                });
-
-                // Populate the remaining departments (after dummy)
-                remainingDepts.forEach(department => {
-                    const option = document.createElement("option");
-                    option.value = department.dept_id;
-                    option.textContent = department.dept_name;
-                    deptSelect.appendChild(option);
-                });
-
-                // Allow adding additional departments
-                data.departments.slice(1).forEach(() => addEditDept());
-
-                // Show the form
-                editUserForm.style.display = "block";
-            })
-            .catch(error => {
-                console.error("Error fetching user data:", error);
-            });
-    }
-
-    function cancelEditUser() {
-        document.getElementById("editUserForm").style.display = "none";
-    }
-
+        function cancelEditUser() {
+            document.getElementById("editUserForm").style.display = "none";
+        }
 
         function showAddPermissionForm() {
             document.getElementById('addPermissionForm').style.display = 'block';

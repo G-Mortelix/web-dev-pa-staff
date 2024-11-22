@@ -30,6 +30,9 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 
+
+# SECTION BREAKS!!
+# DATABASE MODELS
 class User(db.Model, UserMixin):
     __tablename__ = 'users'
     user_id = db.Column(db.Integer, primary_key=True)
@@ -125,6 +128,9 @@ def login():
             flash('Invalid credentials. Please try again.', 'error')
     return render_template('login.html')
 
+# PARTITION FIRST!!!
+# FUNCTIONS BELOW ARE ALL ASSOCIATED WITH THE HOMEPAGE
+
 @app.route('/home')
 @login_required
 def home():
@@ -180,25 +186,9 @@ def home():
 
     return render_template('index.html', pdf_structure=pdf_structure, permissions=permissions)
 
-@app.route('/admin_dashboard')
-@login_required
-@super_admin_required
-def admin_dashboard():
-    roles = Role.query.all()
-    departments = Department.query.all()
-    permissions = Permission.query.all()
-    users = User.query.filter(User.role_id != 1).all()
 
-    departments_serialized = [{"dept_id": dept.dept_id, "dept_name": dept.dept_name} for dept in departments]
-
-    return render_template(
-        'admin_dashboard.html',
-        roles=roles,
-        departments=departments_serialized,
-        permissions=permissions,
-        users=users
-    )
-
+# SECTION BREAK!!
+# ROUTES FOR CONTENT MANAGEMENT
 @app.route('/add_folder', methods=['POST'])
 @login_required
 def add_folder():
@@ -329,7 +319,6 @@ def upload_pdf():
     db.session.commit()
     return jsonify(success=True)
 
-
 @app.route('/delete_folder', methods=['POST'])
 @login_required
 def delete_folder():
@@ -401,70 +390,31 @@ def delete_pdf():
     except Exception as e:
         return jsonify(success=False, error=str(e))
 
-@app.route('/add_department', methods=['POST'])
+
+# NEW PARTITION!!
+# FUNCTIONS BENEATH ARE ALL ASSOCIATED WITH ADMIN DASHBOARD
+@app.route('/admin_dashboard')
 @login_required
 @super_admin_required
-def add_department():
-    dept_name = request.form['dept_name'].strip()
-    if not dept_name:
-        flash('Department name cannot be empty.', 'error')
-        return redirect(url_for('admin_dashboard'))
+def admin_dashboard():
+    roles = Role.query.all()
+    departments = Department.query.all()
+    permissions = Permission.query.all()
+    users = User.query.filter(User.role_id != 1).all()
 
-    existing_dept = Department.query.filter_by(dept_name=dept_name).first()
-    if existing_dept:
-        flash('Department already exists.', 'error')
-        return redirect(url_for('admin_dashboard'))
+    departments_serialized = [{"dept_id": dept.dept_id, "dept_name": dept.dept_name} for dept in departments]
 
-    new_department = Department(dept_name=dept_name)
-    db.session.add(new_department)
-    db.session.commit()
+    return render_template(
+        'admin_dashboard.html',
+        roles=roles,
+        departments=departments_serialized,
+        permissions=permissions,
+        users=users
+    )
 
-    flash('Department added successfully!', 'success')
-    return redirect(url_for('admin_dashboard'))
 
-@app.route('/delete_department', methods=['POST'])
-@login_required
-@super_admin_required
-def delete_department():
-    dept_name = request.form['dept_name'].strip()
-    if not dept_name:
-        flash('Please select a department to delete.', 'error')
-        return redirect(url_for('admin_dashboard'))
-
-    department = Department.query.filter_by(dept_name=dept_name).first()
-    if not department:
-        flash('Department not found.', 'error')
-        return redirect(url_for('admin_dashboard'))
-
-    try:
-        # Delete related folders and their PDFs
-        folders = Folder.query.filter_by(dept_id=department.dept_id).all()
-        for folder in folders:
-            # Delete PDFs in the folder
-            PDFs = PDF.query.filter_by(folder_id=folder.folder_id).all()
-            for pdf in PDFs:
-                # Remove the PDF file from the filesystem
-                if os.path.exists(pdf.pdf_path):
-                    os.remove(pdf.pdf_path)
-                db.session.delete(pdf)
-            # Delete the folder record
-            sanitized_folder_name = sanitize_folder_name(folder.folder_name)
-            sanitized_dept_name = sanitize_folder_name(department.dept_name)
-            folder_path = os.path.join(app.static_folder, 'pdffile', sanitized_dept_name, sanitized_folder_name)
-            if os.path.exists(folder_path):
-                shutil.rmtree(folder_path)  # Remove folder from filesystem
-            db.session.delete(folder)
-
-        # Delete the department itself
-        db.session.delete(department)
-        db.session.commit()
-        flash('Department and all associated data deleted successfully!', 'success')
-        return redirect(url_for('admin_dashboard'))
-    except Exception as e:
-        db.session.rollback()
-        flash(f'Error while deleting department: {e}', 'error')
-
-    return redirect(url_for('admin_dashboard'))
+# SECTION BREAK!!
+# ROUTES FOR MANAGE USERS
 
 @app.route('/register', methods=['GET', 'POST'], endpoint='register_user')
 @super_admin_required
@@ -516,7 +466,6 @@ def register_user():
         return redirect(url_for('admin_dashboard'))
 
     return render_template('admin_dashboard.html', roles=roles, departments=departments)
-
 
 @app.route('/edit_user/<int:user_id>', methods=['GET', 'POST'])
 @login_required
@@ -570,20 +519,19 @@ def edit_user(user_id):
 @super_admin_required
 def get_user_data(user_id):
     user = User.query.get_or_404(user_id)
-    departments = [ud.dept_id for ud in user.user_departments]
+    departments = [ud.dept_id for ud in user.user_departments]  # All associated departments
 
-    # Add a dummy department to JSON data (only for standardization)
-    all_departments = [{"dept_id": 0, "dept_name": "-- Select Department --"}] + [
+    # Fetch all departments for display
+    all_departments = [
         {"dept_id": dept.dept_id, "dept_name": dept.dept_name} for dept in Department.query.all()
     ]
 
     return jsonify({
         "username": user.username,
         "role_id": user.role_id,
-        "departments": departments,
+        "departments": departments,  # Send associated department IDs
         "all_departments": all_departments
     })
-
 
 @app.route('/delete_user/<int:user_id>', methods=['POST'])
 @login_required
@@ -607,6 +555,10 @@ def delete_user(user_id):
         flash(f"Error while deleting user: {e}", "error")
 
     return redirect(url_for('admin_dashboard'))
+
+
+# SECTION BREAK!! 
+# ROUTES FOR PERMISSION
 
 @app.route('/add_permission', methods=['POST'])
 @login_required
@@ -723,6 +675,75 @@ def delete_permission(permission_id):
         return jsonify(success=False, error="Failed to delete permission."), 500
 
 
+# SECTION BREAKS!!
+# ROUTES FOR DEPARTMENTS
+@app.route('/add_department', methods=['POST'])
+@login_required
+@super_admin_required
+def add_department():
+    dept_name = request.form['dept_name'].strip()
+    if not dept_name:
+        flash('Department name cannot be empty.', 'error')
+        return redirect(url_for('admin_dashboard'))
+
+    existing_dept = Department.query.filter_by(dept_name=dept_name).first()
+    if existing_dept:
+        flash('Department already exists.', 'error')
+        return redirect(url_for('admin_dashboard'))
+
+    new_department = Department(dept_name=dept_name)
+    db.session.add(new_department)
+    db.session.commit()
+
+    flash('Department added successfully!', 'success')
+    return redirect(url_for('admin_dashboard'))
+
+@app.route('/delete_department', methods=['POST'])
+@login_required
+@super_admin_required
+def delete_department():
+    dept_name = request.form['dept_name'].strip()
+    if not dept_name:
+        flash('Please select a department to delete.', 'error')
+        return redirect(url_for('admin_dashboard'))
+
+    department = Department.query.filter_by(dept_name=dept_name).first()
+    if not department:
+        flash('Department not found.', 'error')
+        return redirect(url_for('admin_dashboard'))
+
+    try:
+        # Delete related folders and their PDFs
+        folders = Folder.query.filter_by(dept_id=department.dept_id).all()
+        for folder in folders:
+            # Delete PDFs in the folder
+            PDFs = PDF.query.filter_by(folder_id=folder.folder_id).all()
+            for pdf in PDFs:
+                # Remove the PDF file from the filesystem
+                if os.path.exists(pdf.pdf_path):
+                    os.remove(pdf.pdf_path)
+                db.session.delete(pdf)
+            # Delete the folder record
+            sanitized_folder_name = sanitize_folder_name(folder.folder_name)
+            sanitized_dept_name = sanitize_folder_name(department.dept_name)
+            folder_path = os.path.join(app.static_folder, 'pdffile', sanitized_dept_name, sanitized_folder_name)
+            if os.path.exists(folder_path):
+                shutil.rmtree(folder_path)  # Remove folder from filesystem
+            db.session.delete(folder)
+
+        # Delete the department itself
+        db.session.delete(department)
+        db.session.commit()
+        flash('Department and all associated data deleted successfully!', 'success')
+        return redirect(url_for('admin_dashboard'))
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error while deleting department: {e}', 'error')
+
+    return redirect(url_for('admin_dashboard'))
+
+
+# LOGOUT
 @app.route('/logout')
 @login_required
 def logout():
