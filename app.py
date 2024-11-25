@@ -7,8 +7,8 @@ from sqlalchemy import case, ForeignKey
 from sqlalchemy.orm import relationship
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
-from flask import Flask, render_template, redirect, url_for, request, flash, jsonify, session, abort
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+from flask import Flask, render_template, redirect, url_for, request, flash, jsonify, session, abort, send_file
 
 load_dotenv()
 
@@ -137,17 +137,22 @@ def login():
         if user and check_password_hash(user.password_hash, password):
             login_user(user)
             flash('Login successful!', 'success')
+            
+            # Log successful login in the audit log
+            new_log = AuditLog(
+                user_id=user.user_id,  # Log the logged-in user's ID
+                action="Logged in",    # Action description
+                ip_address=request.remote_addr  # IP address of the client
+            )
+            db.session.add(new_log)
+            db.session.commit()
+            
             return redirect(url_for('home'))
         else:
             flash('Invalid credentials. Please try again.', 'error')
-        
-        if login_successful:
-            new_log = AuditLog(
-                user_id=current_user.user_id,
-                action="Logged in",
-                ip_address=request.remote_addr
-            )
+    
     return render_template('login.html')
+
 
 # PARTITION FIRST!!!
 # FUNCTIONS BELOW ARE ALL ASSOCIATED WITH THE HOMEPAGE
@@ -176,7 +181,7 @@ def home():
     }
     permissions = {**default_permissions, **user_permission_map}
 
-    if current_user.role_id == 1:  # Admin can view all folders
+    if current_user.role_id == 0 or current_user.role_id == 1:  # Master admin and Admin can view all folders
         departments = Department.query.all()
     else:
         user_departments = [ud.dept_id for ud in current_user.user_departments]
@@ -264,7 +269,7 @@ def sanitize_folder_name(name):
 @app.route('/edit_folder', methods=['POST'])
 @login_required
 def edit_folder():
-    if current_user.role_id != 1:
+    if current_user.role_id != 0 or current_user.role_id != 1:
         return jsonify(success=False, error="You do not have permission to edit folders.")
     
     data = request.get_json()
@@ -336,7 +341,7 @@ def upload_pdf():
     if not folder:
         return jsonify(success=False, error="Folder not found.")
 
-    if current_user.role_id != 1:
+    if current_user.role_id != 0 or current_user.role_id !=1:
         permission = Permission.query.filter_by(user_id=current_user.user_id, dept_id=folder.dept_id).first()
         if not permission or not permission.write_permission:
             return jsonify(success=False, error="You do not have permission to upload PDFs.")
@@ -375,7 +380,7 @@ def upload_pdf():
 @app.route('/delete_folder', methods=['POST'])
 @login_required
 def delete_folder():
-    if current_user.role_id != 1:
+    if current_user.role_id != 0 or current_user.role_id != 1:
         return jsonify(success=False, error="You do not have permission to delete folders.")
     
     data = request.get_json()
@@ -425,7 +430,7 @@ def delete_pdf():
         return jsonify(success=False, error="Folder not found.")
 
     # Admins bypass permission checks
-    if current_user.role_id != 1:
+    if current_user.role_id != 0 or current_user.role_id != 1:
         # Check user permissions
         permission = Permission.query.filter_by(user_id=current_user.user_id, dept_id=folder.dept_id).first()
         if not permission or not permission.delete_permission:
@@ -473,7 +478,7 @@ def admin_dashboard():
     roles = Role.query.all()
     departments = Department.query.all()
     permissions = Permission.query.all()
-    users = User.query.filter(User.role_id != 1).all()
+    users = User.query.filter(User.role_id != 1 or User.role_id != 0).all()
 
     departments_serialized = [{"dept_id": dept.dept_id, "dept_name": dept.dept_name} for dept in departments]
 
@@ -653,7 +658,7 @@ def add_permission():
 
     # Check if the user and department exist
     user = User.query.get(user_id)
-    if user.role_id == 1:  # Prevent adding permissions for admins
+    if user.role_id == 0 or user.role_id == 1:  # Prevent adding permissions for admins
         flash('Cannot add permissions for admins.', 'error')
         return redirect(url_for('admin_dashboard'))
     
