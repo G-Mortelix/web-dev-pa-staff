@@ -13,14 +13,6 @@
             <h1>Admin Dashboard</h1>
         </div>
         <div class="header-buttons">
-            {% if current_user.role_id == 0 %}
-                <div id="master-admin-actions">
-                    <h2>Master Admin Actions</h2>
-                    <button onclick="manageAdmins()">Manage Admins</button>
-                    <button onclick="viewLogs()">View Logs</button>
-                </div>
-            {% endif %}
-
             <a href="{{ url_for('home') }}" class="dashboard-button">Back</a>
             <a href="{{ url_for('logout') }}" class="logout-button">Logout</a>
         </div>
@@ -392,22 +384,43 @@
 
         function handleRoleChange() {
             const roleSelect = document.getElementById("role");
-            const departmentSelect = document.getElementById("department");
+            const departmentDropdown = document.getElementById("department");
             const departmentLabel = document.getElementById("department-label");
-            const noDeptOption = document.querySelector(".no-dept-option");
 
-            // Get the selected role's text (e.g., "Admin" or "User")
             const selectedRole = roleSelect.options[roleSelect.selectedIndex].text;
 
             if (selectedRole === "Admin") {
-                noDeptOption.style.display = "block";  // Show "No Department"
-                departmentSelect.value = "";  // Default to no department
-                departmentSelect.disabled = true;  // Disable department selection
-                departmentLabel.style.display = "none";  // Hide the label
+                departmentDropdown.innerHTML = ""; // Clear dropdown options
+                const noDeptOption = document.createElement("option");
+                noDeptOption.value = "none";
+                noDeptOption.textContent = "No Department";
+                departmentDropdown.appendChild(noDeptOption);
+
+                departmentDropdown.value = "none"; // Set default value
+                departmentDropdown.disabled = true; // Disable dropdown
+                departmentLabel.style.display = "none"; // Hide the label
             } else {
-                noDeptOption.style.display = "none";  // Hide "No Department"
-                departmentSelect.disabled = false;  // Enable department selection
-                departmentLabel.style.display = "block";  // Show the label
+                // Reinitialize the dropdown for other roles
+                departmentDropdown.disabled = false;
+                departmentLabel.style.display = "block";
+
+                // Populate with actual department options
+                const departments = JSON.parse(document.getElementById("departments-data").textContent);
+                departmentDropdown.innerHTML = ""; // Clear dropdown options
+                const dummyOption = document.createElement("option");
+                dummyOption.value = "";  // Empty value
+                dummyOption.textContent = "-- Select Department --";
+                dummyOption.disabled = true;  // Prevent form submission with this value
+                dummyOption.selected = true;  // Default selected
+                departmentDropdown.appendChild(dummyOption);
+
+
+                departments.forEach(department => {
+                    const option = document.createElement("option");
+                    option.value = department.dept_id;
+                    option.textContent = department.dept_name;
+                    departmentDropdown.appendChild(option);
+                });
             }
         }
 

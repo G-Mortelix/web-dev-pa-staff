@@ -112,11 +112,19 @@ class AuditLog(db.Model):
     def __repr__(self):
         return f"<AuditLog(log_id={self.log_id}, user_id={self.user_id}, action='{self.action}', target_file='{self.target_file}', timestamp={self.timestamp})>"
 
-def super_admin_required(f):
+def master_admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if not current_user.is_authenticated or current_user.role_id not in [0, 1]:  # Include master_admin
-            abort(403)  # Forbidden access
+        if not current_user.is_authenticated or current_user.role_id != 0:  # Only Master Admin
+            abort(403)  # Forbidden
+        return f(*args, **kwargs)
+    return decorated_function
+
+def admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not current_user.is_authenticated or current_user.role_id not in [0, 1]:  # Master Admin or Admin
+            abort(403)  # Forbidden
         return f(*args, **kwargs)
     return decorated_function
 
@@ -162,7 +170,17 @@ def login():
 def home():
     pdf_structure = {}
 
-    departments = Department.query.all()
+    # Determine accessible departments based on the current user's role
+    if current_user.role_id == 0:  # Master Admin
+        departments = Department.query.all()  # Access all departments
+    elif current_user.role_id == 1:  # Admin
+        departments = Department.query.all()  # Admin also has access to all departments
+    else:  # Regular users
+        user_departments = [ud.dept_id for ud in current_user.user_departments]
+        # Include the "General" department (assuming dept_id = 4)
+        departments = Department.query.filter(Department.dept_id.in_(user_departments + [4])).all()
+
+    # Fetch permissions for the current user
     user_permissions = Permission.query.filter_by(user_id=current_user.user_id).all()
 
     # Map user permissions
@@ -173,7 +191,6 @@ def home():
         user_permission_map[perm.dept_id]['write'] |= perm.write_permission
         user_permission_map[perm.dept_id]['delete'] |= perm.delete_permission
 
-
     # Add default permissions for departments without explicit permissions
     default_permissions = {
         dept.dept_id: {'write': False, 'delete': False}
@@ -181,14 +198,7 @@ def home():
     }
     permissions = {**default_permissions, **user_permission_map}
 
-    if current_user.role_id == 0 or current_user.role_id == 1:  # Master admin and Admin can view all folders
-        departments = Department.query.all()
-    else:
-        user_departments = [ud.dept_id for ud in current_user.user_departments]
-        # Always include the "General" department (assuming dept_id = 4)
-        departments = Department.query.filter(Department.dept_id.in_(user_departments + [4])).all()
-
-
+    # Build PDF structure for accessible departments
     for department in departments:
         folders = Folder.query.filter_by(dept_id=department.dept_id).all()
         pdf_structure[department.dept_name] = {}
@@ -213,12 +223,13 @@ def home():
     return render_template('index.html', pdf_structure=pdf_structure, permissions=permissions)
 
 
+
 # SECTION BREAK!!
 # ROUTES FOR CONTENT MANAGEMENT
 @app.route('/add_folder', methods=['POST'])
 @login_required
 def add_folder():
-    if current_user.role_id != 1:  # Only admin can add folders
+    if current_user.role_id not in [0, 1]:
         return jsonify(success=False, error="You do not have permission to add folders.")
 
     data = request.get_json()
@@ -269,9 +280,9 @@ def sanitize_folder_name(name):
 @app.route('/edit_folder', methods=['POST'])
 @login_required
 def edit_folder():
-    if current_user.role_id != 0 or current_user.role_id != 1:
+    if current_user.role_id not in [0, 1]:
         return jsonify(success=False, error="You do not have permission to edit folders.")
-    
+
     data = request.get_json()
     old_folder_name = data.get('oldFolderName', '').strip()
     new_folder_name = data.get('newFolderName', '').strip()
@@ -341,7 +352,7 @@ def upload_pdf():
     if not folder:
         return jsonify(success=False, error="Folder not found.")
 
-    if current_user.role_id != 0 or current_user.role_id !=1:
+    if current_user.role_id not in [0, 1]:
         permission = Permission.query.filter_by(user_id=current_user.user_id, dept_id=folder.dept_id).first()
         if not permission or not permission.write_permission:
             return jsonify(success=False, error="You do not have permission to upload PDFs.")
@@ -380,7 +391,7 @@ def upload_pdf():
 @app.route('/delete_folder', methods=['POST'])
 @login_required
 def delete_folder():
-    if current_user.role_id != 0 or current_user.role_id != 1:
+    if current_user.role_id not in [0, 1]:
         return jsonify(success=False, error="You do not have permission to delete folders.")
     
     data = request.get_json()
@@ -430,7 +441,7 @@ def delete_pdf():
         return jsonify(success=False, error="Folder not found.")
 
     # Admins bypass permission checks
-    if current_user.role_id != 0 or current_user.role_id != 1:
+    if current_user.role_id not in [0, 1]:
         # Check user permissions
         permission = Permission.query.filter_by(user_id=current_user.user_id, dept_id=folder.dept_id).first()
         if not permission or not permission.delete_permission:
@@ -473,12 +484,18 @@ def delete_pdf():
 # FUNCTIONS BENEATH ARE ALL ASSOCIATED WITH ADMIN DASHBOARD
 @app.route('/admin_dashboard')
 @login_required
-@super_admin_required
+@admin_required
 def admin_dashboard():
     roles = Role.query.all()
     departments = Department.query.all()
     permissions = Permission.query.all()
-    users = User.query.filter(User.role_id != 1 or User.role_id != 0).all()
+    
+    if current_user.role_id == 0:  # Master Admin
+        users = User.query.filter(User.role_id != 0).all()  # Exclude other Master Admins
+    elif current_user.role_id == 1:  # Admin
+        users = User.query.filter(User.role_id == 2).all()  # Only Users (role_id=2)
+    else:
+        abort(403)
 
     departments_serialized = [{"dept_id": dept.dept_id, "dept_name": dept.dept_name} for dept in departments]
 
@@ -495,7 +512,7 @@ def admin_dashboard():
 # ROUTES FOR MANAGE USERS
 
 @app.route('/register', methods=['GET', 'POST'], endpoint='register_user')
-@super_admin_required
+@admin_required
 @login_required
 def register_user():
     roles = Role.query.all()
@@ -521,6 +538,17 @@ def register_user():
         if len(dept_ids) > 4:  # Limit departments to 4
             flash('A user cannot be assigned to more than 4 departments.', 'error')
             return redirect(url_for('admin_dashboard'))
+        
+        # Filter out invalid department IDs
+        dept_ids = [int(dept_id) for dept_id in dept_ids if dept_id.isdigit()]
+
+        # Set primary department for non-admin roles
+        primary_dept_id = dept_ids[0] if dept_ids else None
+
+        # For Admins, ensure no department assignment
+        if role_id == 0 or role_id == 1:
+            dept_ids = []
+            primary_dept_id = None
 
         # Hash the password
         hashed_password = generate_password_hash(password)
@@ -547,7 +575,7 @@ def register_user():
 
 @app.route('/edit_user/<int:user_id>', methods=['GET', 'POST'])
 @login_required
-@super_admin_required
+@admin_required
 def edit_user(user_id):
     user = User.query.get_or_404(user_id)
     departments = Department.query.all()
@@ -594,7 +622,7 @@ def edit_user(user_id):
 
 @app.route('/get_user_data/<int:user_id>', methods=['GET'])
 @login_required
-@super_admin_required
+@admin_required
 def get_user_data(user_id):
     user = User.query.get_or_404(user_id)
     departments = [ud.dept_id for ud in user.user_departments]  # All associated departments
@@ -613,24 +641,22 @@ def get_user_data(user_id):
 
 @app.route('/delete_user/<int:user_id>', methods=['POST'])
 @login_required
-@super_admin_required
+@admin_required
 def delete_user(user_id):
-    try:
-        user = User.query.get(user_id)
-        if not user:
-            flash("User not found.", "error")
-            return redirect(url_for('admin_dashboard'))
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify(success=False, error="User not found")
 
-        # Check for associated records in other tables (e.g., permissions)
-        Permission.query.filter_by(user_id=user_id).delete(synchronize_session=False)
+    # Role-based checks
+    if current_user.role_id == 1 and user.role_id != 2:  # Admin cannot delete Admin or Master Admin
+        return jsonify(success=False, error="You do not have permission to delete this user.")
+    elif current_user.role_id == 0 and user.role_id == 0:  # Master Admin cannot delete another Master Admin
+        return jsonify(success=False, error="You cannot delete another Master Admin.")
 
-        # Delete the user
-        db.session.delete(user)
-        db.session.commit()
-        return jsonify(success=True)
-    except Exception as e:
-        db.session.rollback()
-        flash(f"Error while deleting user: {e}", "error")
+    # Perform deletion
+    db.session.delete(user)
+    db.session.commit()
+    return jsonify(success=True)
 
     return redirect(url_for('admin_dashboard'))
 
@@ -640,7 +666,7 @@ def delete_user(user_id):
 
 @app.route('/add_permission', methods=['POST'])
 @login_required
-@super_admin_required
+@admin_required
 def add_permission():
     user_id = request.form.get('user_id')
     dept_id = request.form.get('dept_id')
@@ -691,7 +717,7 @@ def add_permission():
 
 @app.route('/get_permission_data/<int:permission_id>', methods=['GET'])
 @login_required
-@super_admin_required
+@admin_required
 def get_permission_data(permission_id):
     permission = Permission.query.get(permission_id)
     if permission:
@@ -706,7 +732,7 @@ def get_permission_data(permission_id):
 
 @app.route('/update_permission', methods=['POST'])
 @login_required
-@super_admin_required
+@admin_required
 def update_permission():
     data = request.get_json()
     permission_id = data.get('permission_id')
@@ -735,7 +761,7 @@ def update_permission():
     
 @app.route('/delete_permission/<int:permission_id>', methods=['DELETE'])
 @login_required
-@super_admin_required
+@admin_required
 def delete_permission(permission_id):
     permission = Permission.query.get(permission_id)
     if not permission:
@@ -757,7 +783,7 @@ def delete_permission(permission_id):
 # ROUTES FOR DEPARTMENTS
 @app.route('/add_department', methods=['POST'])
 @login_required
-@super_admin_required
+@admin_required
 def add_department():
     dept_name = request.form['dept_name'].strip()
     if not dept_name:
@@ -778,7 +804,7 @@ def add_department():
 
 @app.route('/delete_department', methods=['POST'])
 @login_required
-@super_admin_required
+@admin_required
 def delete_department():
     dept_name = request.form['dept_name'].strip()
     if not dept_name:
@@ -824,7 +850,7 @@ def delete_department():
 # MASTER ADMIN SECTION
 @app.route('/manage_admins', methods=['POST'])
 @login_required
-@super_admin_required
+@master_admin_required
 def manage_admins():
     if current_user.role_id != 0:  # Only master_admin
         abort(403)
@@ -849,7 +875,7 @@ def manage_admins():
 
 @app.route('/fetch_audit_logs', methods=['GET'])
 @login_required
-@super_admin_required
+@admin_required
 def fetch_audit_logs():
     logs = AuditLog.query.order_by(AuditLog.timestamp.desc()).limit(100).all()
 
