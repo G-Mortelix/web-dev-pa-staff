@@ -490,12 +490,13 @@ def admin_dashboard():
     departments = Department.query.all()
     permissions = Permission.query.all()
     
+    # Role-based user fetching
     if current_user.role_id == 0:  # Master Admin
-        users = User.query.filter(User.role_id != 0).all()  # Exclude other Master Admins
+        users = User.query.all()  # Fetch all users
     elif current_user.role_id == 1:  # Admin
-        users = User.query.filter(User.role_id == 2).all()  # Only Users (role_id=2)
+        users = User.query.filter(User.role_id == 2).all()  # Fetch only regular users
     else:
-        abort(403)
+        abort(403)  # Regular users cannot access the dashboard
 
     departments_serialized = [{"dept_id": dept.dept_id, "dept_name": dept.dept_name} for dept in departments]
 
@@ -523,12 +524,28 @@ def register_user():
         password = request.form['password']
         role_id = request.form.get('role_id')
         dept_ids = request.form.getlist('dept_ids')  # Get list of selected department IDs
-        
+
+        # Role restrictions
+        if current_user.role_id == 1 and role_id in [0, 1]:
+            flash("You do not have permission to register an admin or master admin.", "error")
+            return redirect(url_for('register_user'))
+
         # Validate inputs
         if not username or not password or not role_id:
             flash('All fields are required.', 'error')
             return redirect(url_for('register_user'))
+        
+        # Filter out invalid department IDs
+        dept_ids = [int(dept_id) for dept_id in dept_ids if dept_id.isdigit()]
 
+        # Set primary department for non-admin roles
+        primary_dept_id = dept_ids[0] if dept_ids else None
+
+        # Prevent assigning departments to Admins and Master Admins
+        if role_id in [0, 1] and dept_ids:
+            flash("Admins and Master Admins cannot be assigned to any department.", "error")
+            return redirect(url_for('register_user'))
+        
         # Check if the username is already taken
         existing_user = User.query.filter_by(username=username).first()
         if existing_user:
@@ -538,17 +555,6 @@ def register_user():
         if len(dept_ids) > 4:  # Limit departments to 4
             flash('A user cannot be assigned to more than 4 departments.', 'error')
             return redirect(url_for('admin_dashboard'))
-        
-        # Filter out invalid department IDs
-        dept_ids = [int(dept_id) for dept_id in dept_ids if dept_id.isdigit()]
-
-        # Set primary department for non-admin roles
-        primary_dept_id = dept_ids[0] if dept_ids else None
-
-        # For Admins, ensure no department assignment
-        if role_id == 0 or role_id == 1:
-            dept_ids = []
-            primary_dept_id = None
 
         # Hash the password
         hashed_password = generate_password_hash(password)
@@ -643,121 +649,144 @@ def get_user_data(user_id):
 @login_required
 @admin_required
 def delete_user(user_id):
-    user = User.query.get(user_id)
-    if not user:
-        return jsonify(success=False, error="User not found")
+    try:
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify(success=False, error="User not found")
+            return redirect(url_for('admin_dashboard'))
 
-    # Role-based checks
-    if current_user.role_id == 1 and user.role_id != 2:  # Admin cannot delete Admin or Master Admin
-        return jsonify(success=False, error="You do not have permission to delete this user.")
-    elif current_user.role_id == 0 and user.role_id == 0:  # Master Admin cannot delete another Master Admin
-        return jsonify(success=False, error="You cannot delete another Master Admin.")
+        # Role-based checks
+        if current_user.role_id == 1 and user.role_id != 2:  # Admin cannot delete Admin or Master Admin
+            return jsonify(success=False, error="You do not have permission to delete this user.")
+        elif current_user.role_id == 0 and user.role_id == 0:  # Master Admin cannot delete another Master Admin
+            return jsonify(success=False, error="You cannot delete another Master Admin.")
 
-    # Perform deletion
-    db.session.delete(user)
-    db.session.commit()
-    return jsonify(success=True)
+        # Delete associated records in other tables
+        Permission.query.filter_by(user_id=user_id).delete()
+        AuditLog.query.filter_by(user_id=user_id).delete()
+        UserDepartment.query.filter_by(user_id=user_id).delete()
 
-    return redirect(url_for('admin_dashboard'))
+        # Perform deletion
+        db.session.delete(user)
+        db.session.commit()
+        return jsonify(success=True)
+    
+        flash("User deleted successfully.", "success")
+        return redirect(url_for('admin_dashboard'))
+    except Exception as e:
+        db.session.rollback()
+        flash(f"Error deleting the user: {e}", "error")
+        return redirect(url_for('admin_dashboard'))
 
 
 # SECTION BREAK!! 
 # ROUTES FOR PERMISSION
 
-@app.route('/add_permission', methods=['POST'])
+@app.route('/add_permission', methods=['GET', 'POST'])
 @login_required
 @admin_required
 def add_permission():
-    user_id = request.form.get('user_id')
-    dept_id = request.form.get('dept_id')
-    write_permission = request.form.get('write_permission') == '1'
-    delete_permission = request.form.get('delete_permission') == '1'
+    users = User.query.filter(User.role_id > 1).all()  # Exclude admins and master admins
 
-    if not user_id or not dept_id:
-        flash('User ID and Department ID are required.', 'error')
-        return redirect(url_for('admin_dashboard'))  # Ensure a redirect
+    if request.method == 'POST':
+        user_id = request.form.get('user_id')
+        write_permissions = request.form.getlist('write_permission')  # List of selected department IDs
+        delete_permissions = request.form.getlist('delete_permission')
 
-    existing_permission = Permission.query.filter_by(user_id=user_id, dept_id=dept_id).first()
-    if existing_permission:
-        flash('Permission already exists for this user and department.', 'error')
-        return redirect(url_for('admin_dashboard'))  # Ensure a redirect
+        if not user_id:
+            flash('User selection is required.', 'error')
+            return redirect(url_for('admin_dashboard'))
 
-    # Check if the user and department exist
-    user = User.query.get(user_id)
-    if user.role_id == 0 or user.role_id == 1:  # Prevent adding permissions for admins
-        flash('Cannot add permissions for admins.', 'error')
+        user = User.query.get(user_id)
+        if not user or user.role_id in [0, 1]:
+            flash('Invalid user selection.', 'error')
+            return redirect(url_for('admin_dashboard'))
+
+        user_departments = [ud.dept_id for ud in user.user_departments]
+
+        # Add or update permissions for each department
+        for dept_id in user_departments:
+            write_permission = str(dept_id) in write_permissions
+            delete_permission = str(dept_id) in delete_permissions
+
+            existing_permission = Permission.query.filter_by(user_id=user_id, dept_id=dept_id).first()
+            if existing_permission:
+                existing_permission.write_permission = write_permission
+                existing_permission.delete_permission = delete_permission
+            else:
+                new_permission = Permission(
+                    user_id=user_id,
+                    dept_id=dept_id,
+                    write_permission=write_permission,
+                    delete_permission=delete_permission
+                )
+                db.session.add(new_permission)
+
+        try:
+            db.session.commit()
+            flash('Permissions updated successfully!', 'success')
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Failed to update permissions: {e}', 'error')
+
         return redirect(url_for('admin_dashboard'))
-    
-    department = Department.query.get(dept_id)
-    if not user or not department:
-        flash('Invalid user or department.', 'error')
-        return redirect(url_for('admin_dashboard'))  # Ensure a redirect
-    
-    # Validate that the user belongs to the department or has the right permissions
-    if user.role_id != 1 and user.dept_id != int(dept_id):  # Admins bypass validation
-        flash(f"User '{user.username}' does not belong to the '{department.dept_name}' department.", 'error')
-        return redirect(url_for('admin_dashboard'))
 
-    # Add the new permission
-    new_permission = Permission(
-        user_id=user_id,
-        dept_id=dept_id,
-        write_permission=write_permission,
-        delete_permission=delete_permission
-    )
-    db.session.add(new_permission)
-    try:
-        db.session.commit()
-        flash('Permission added successfully!', 'success')
-        return redirect(url_for('admin_dashboard'))  # Success case
-    except Exception as e:
-        db.session.rollback()
-        flash(f'Failed to add permission: {e}', 'error')
-        return redirect(url_for('admin_dashboard'))  # Failure case
+    return render_template('admin_dashboard.html', users=users)
 
-@app.route('/get_permission_data/<int:permission_id>', methods=['GET'])
+
+@app.route('/get_permission_data/<int:user_id>', methods=['GET'])
 @login_required
 @admin_required
-def get_permission_data(permission_id):
-    permission = Permission.query.get(permission_id)
-    if permission:
-        return jsonify({
-            'read_permission': permission.read_permission,
-            'write_permission': permission.write_permission,
-            'delete_permission': permission.delete_permission
-        })
-    
-    flash('Permission not found.', 'error')
-    return jsonify({'error': 'Permission not found'}), 404
+def get_permission_data(user_id):
+    permissions = Permission.query.filter_by(user_id=user_id).all()
+    if not permissions:
+        return jsonify(error="No permissions found for this user"), 404
+
+    serialized_permissions = [
+        {
+            "dept_id": permission.dept_id,
+            "write_permission": permission.write_permission,
+            "delete_permission": permission.delete_permission
+        }
+        for permission in permissions
+    ]
+
+    return jsonify(success=True, permissions=serialized_permissions)
 
 @app.route('/update_permission', methods=['POST'])
 @login_required
 @admin_required
 def update_permission():
     data = request.get_json()
-    permission_id = data.get('permission_id')
-    read_permission = data.get('read_permission')
-    write_permission = data.get('write_permission')
-    delete_permission = data.get('delete_permission')
+    user_id = data.get('user_id')
+    updated_permissions = data.get('permissions')  # List of department permissions
 
-    print(f"Updating permission {permission_id}: Read={read_permission}, Write={write_permission}, Delete={delete_permission}")
+    if not user_id or not updated_permissions:
+        return jsonify(success=False, error="User ID and permissions are required"), 400
 
-    permission = Permission.query.get(permission_id)
-    if permission:
-        permission.read_permission = read_permission
-        permission.write_permission = write_permission
-        permission.delete_permission = delete_permission
-        try:
-            db.session.commit()
-            flash('Permission successfully updated.', 'success')
-            return jsonify(success=True)
-        except Exception as e:
-            db.session.rollback()
-            flash(f'Failed to update permission: {e}', 'error')
-            return jsonify(success=False, error="Failed to update permission."), 500
-    else:
-        flash('Permission not found.', 'error')
-        return jsonify(success=False, error="Permission not found"), 404
+    try:
+        for permission_data in updated_permissions:
+            dept_id = permission_data.get('dept_id')
+            permission = Permission.query.filter_by(user_id=user_id, dept_id=dept_id).first()
+
+            if permission:
+                permission.write_permission = permission_data.get('write_permission', permission.write_permission)
+                permission.delete_permission = permission_data.get('delete_permission', permission.delete_permission)
+            else:
+                # Add a new permission if it doesn't exist
+                new_permission = Permission(
+                    user_id=user_id,
+                    dept_id=dept_id,
+                    write_permission=permission_data.get('write_permission', False),
+                    delete_permission=permission_data.get('delete_permission', False)
+                )
+                db.session.add(new_permission)
+
+        db.session.commit()
+        return jsonify(success=True)
+    except Exception as e:
+        db.session.rollback()
+        return jsonify(success=False, error=str(e))
     
 @app.route('/delete_permission/<int:permission_id>', methods=['DELETE'])
 @login_required
@@ -848,31 +877,6 @@ def delete_department():
 
 # SECTION BREAK!!
 # MASTER ADMIN SECTION
-@app.route('/manage_admins', methods=['POST'])
-@login_required
-@master_admin_required
-def manage_admins():
-    if current_user.role_id != 0:  # Only master_admin
-        abort(403)
-
-    data = request.get_json()
-    user_id = data.get('user_id')
-    action = data.get('action')  # promote/demote
-
-    user = User.query.get(user_id)
-    if not user:
-        return jsonify(success=False, error="User not found.")
-
-    if action == 'promote' and user.role_id != 1:
-        user.role_id = 1
-    elif action == 'demote' and user.role_id == 1 and user.user_id != current_user.user_id:
-        user.role_id = 2  # Default to user role (e.g., `role_id=2`)
-    else:
-        return jsonify(success=False, error="Invalid action or unauthorized.")
-
-    db.session.commit()
-    return jsonify(success=True)
-
 @app.route('/fetch_audit_logs', methods=['GET'])
 @login_required
 @admin_required

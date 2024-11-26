@@ -22,9 +22,6 @@
                 unintentionally, please stop immediately and notify the administrator.</p>
         </div>
         <div class="header-buttons">
-            {% if current_user.role_id == 0 %}
-                <a href="{{ url_for('manage_admins') }}" class="manageadmin-button">Admin Management</a>
-            {% endif %}
             {% if current_user.role_id == 1 or current_user.role_id == 0 %}
                 <a href="{{ url_for('admin_dashboard') }}" class="dashboard-button">Admin Dashboard</a>
             {% endif %}
