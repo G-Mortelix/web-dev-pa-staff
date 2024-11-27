@@ -167,6 +167,7 @@
                     <form method="POST" action="{{ url_for('add_permission') }}">
                         <label for="user">Select User:</label>
                         <select id="user" name="user_id" required>
+                            <option value="" disabled selected>Select a User</option> <!-- Placeholder option -->
                             {% for user in users %}
                                 {% if user.role_id > 1 %}
                                     <option value="{{ user.user_id }}">{{ user.username }}</option>
@@ -174,7 +175,10 @@
                             {% endfor %}
                         </select>
 
-                        <div id="permissions-container">
+                        <!-- Add a new button for "Add Permission" -->
+                        <button type="button" id="addPermissionBtn">Add Permission</button>
+
+                        <div id="permissions-container" style="display:none;">
                             <h4>Permissions</h4>
                             {% for department in departments %}
                                 <div class="department-permission">
@@ -185,11 +189,11 @@
                             {% endfor %}
                         </div>
 
-                        <button type="submit" class="form-submit">Add Permission</button>
+                        <button type="submit" class="form-submit">Confirm Permission</button>
                         <button type="button" onclick="resetManagePermissions()">Back</button>
                     </form>
                 </div>
-            
+
                 <!-- Manage Existing Permissions Table -->
                 <div id="managePermissionsTable" style="display: none;">
                     <h3>Existing Permissions</h3>
@@ -580,38 +584,61 @@
             document.getElementById('permissionManageOptions').style.display = 'block';
         }
 
-        document.getElementById('user').addEventListener('change', function () {
-            const userId = this.value;
+        document.addEventListener("DOMContentLoaded", function() {
+            // Initially, hide the permission form
+            const addPermissionForm = document.getElementById('addPermissionForm');
+            addPermissionForm.style.display = 'none';
 
-            fetch(`/get_permission_data/${userId}`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.error) {
-                        alert(data.error);
-                        return;
-                    }
+            const userIdSelect = document.getElementById('user');
+            const addPermissionBtn = document.getElementById('addPermissionBtn');
+            const permissionsContainer = document.getElementById('permissions-container');
 
-                    const permissionsContainer = document.getElementById('permissions-container');
-                    permissionsContainer.innerHTML = ''; // Clear existing permissions
+            // When a user is selected, show the "Add Permission" button
+            userIdSelect.addEventListener('change', function() {
+                if (this.value) {
+                    addPermissionBtn.style.display = 'inline-block';  // Show the button
+                } else {
+                    addPermissionBtn.style.display = 'none';  // Hide the button if no user selected
+                }
+            });
 
-                    data.permissions.forEach(permission => {
-                        const row = document.createElement('div');
-                        row.className = 'department-permission';
+            // Show permissions form when "Add Permission" is clicked
+            addPermissionBtn.addEventListener('click', function() {
+                const userId = userIdSelect.value;
 
-                        row.innerHTML = `
-                            <label>${permission.dept_name}:</label>
-                            <input type="checkbox" name="write_permission" value="${permission.dept_id}" ${permission.write_permission ? 'checked' : ''}> Write
-                            <input type="checkbox" name="delete_permission" value="${permission.dept_id}" ${permission.delete_permission ? 'checked' : ''}> Delete
-                        `;
+                // Fetch permissions for the selected user
+                if (userId) {
+                    fetch(`/get_permission_data/${userId}`)
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.error) {
+                                alert(data.error);
+                                return;
+                            }
 
-                        permissionsContainer.appendChild(row);
-                    });
-                })
-                .catch(err => {
-                    console.error('Error loading permissions:', err);
-                });
+                            // Show permissions container
+                            permissionsContainer.style.display = 'block';
+                            permissionsContainer.innerHTML = '';  // Clear previous permissions
+
+                            // Populate permissions container based on the fetched data
+                            data.permissions.forEach(permission => {
+                                const row = document.createElement('div');
+                                row.className = 'department-permission';
+
+                                row.innerHTML = `
+                                    <label>${permission.dept_name}:</label>
+                                    <input type="checkbox" name="write_permission" value="${permission.dept_id}" ${permission.write_permission ? 'checked' : ''}> Write
+                                    <input type="checkbox" name="delete_permission" value="${permission.dept_id}" ${permission.delete_permission ? 'checked' : ''}> Delete
+                                `;
+                                permissionsContainer.appendChild(row);
+                            });
+                        })
+                        .catch(err => {
+                            console.error('Error loading permissions:', err);
+                        });
+                }
+            });
         });
-
 
         function openEditPermissionModal(permissionId) {
             fetch(`/get_permission_data/${permissionId}`)

@@ -733,25 +733,30 @@ def add_permission():
 
     return render_template('admin_dashboard.html', users=users)
 
-
 @app.route('/get_permission_data/<int:user_id>', methods=['GET'])
 @login_required
 @admin_required
 def get_permission_data(user_id):
     permissions = Permission.query.filter_by(user_id=user_id).all()
+    
+    # If no permissions found, return an error
     if not permissions:
         return jsonify(error="No permissions found for this user"), 404
 
-    serialized_permissions = [
-        {
+    serialized_permissions = []
+    
+    # Populate the serialized data with dept_name
+    for permission in permissions:
+        dept_name = permission.department.dept_name if permission.department else "Unknown"
+        serialized_permissions.append({
             "dept_id": permission.dept_id,
+            "dept_name": dept_name,  # Add department name here
             "write_permission": permission.write_permission,
             "delete_permission": permission.delete_permission
-        }
-        for permission in permissions
-    ]
+        })
 
     return jsonify(success=True, permissions=serialized_permissions)
+
 
 @app.route('/update_permission', methods=['POST'])
 @login_required
