@@ -157,13 +157,13 @@
                 
                 <!-- Permission Management Options -->
                 <div id="permissionManageOptions">
-                    <button onclick="showAddPermissionForm()">Add Permission for Users</button>
-                    <button onclick="showManagePermissionsTable()">Manage Existing Permissions</button>
+                    <button onclick="showAddPermissionForm()">Add and Edit Permission for Users</button>
+                    <button onclick="showManagePermissionsTable()">Display Existing Permissions</button>
                 </div>
                 
                 <!-- Add Permission Form -->
                 <div id="addPermissionForm" style="display: none;">
-                    <h3>Add Permission for User</h3>
+                    <h3>Edit Permission for User</h3>
                     <form method="POST" action="{{ url_for('add_permission') }}">
                         <label for="user">Select User:</label>
                         <select id="user" name="user_id" required>
@@ -174,22 +174,21 @@
                                 {% endif %}
                             {% endfor %}
                         </select>
-
+                        
+                        <button type="submit" class="form-submit">Add Permission</button>   
                         <!-- Add a new button for "Add Permission" -->
-                        <button type="button" id="addPermissionBtn">Add Permission</button>
+                        <button type="button" id="addPermissionBtn">Edit Permission</button>
 
                         <div id="permissions-container" style="display:none;">
                             <h4>Permissions</h4>
                             {% for department in departments %}
                                 <div class="department-permission">
                                     <label>{{ department.dept_name }}:</label>
-                                    <input type="checkbox" name="write_permission" value="{{ department.dept_id }}"> Write
+                                    <input type="checkbox" name="write_permission" value="{{ department.dept_id }}"> Upload
                                     <input type="checkbox" name="delete_permission" value="{{ department.dept_id }}"> Delete
                                 </div>
                             {% endfor %}
                         </div>
-
-                        <button type="submit" class="form-submit">Confirm Permission</button>
                         <button type="button" onclick="resetManagePermissions()">Back</button>
                     </form>
                 </div>
@@ -198,40 +197,36 @@
                 <div id="managePermissionsTable" style="display: none;">
                     <h3>Existing Permissions</h3>
                     <table class="permissions-table">
-                        <tr>
-                            <th>Username</th>
-                            <th>Department</th>
-                            <th>Write (Upload a PDF)</th>
-                            <th>Delete (Delete a PDF)</th>
-                            <th>Actions</th>
-                        </tr>
-                        {% for permission in permissions %}
+                        <thead>
                             <tr>
-                                <td>{{ permission.user.username }}</td>
-                                <td>{{ permission.department.dept_name }}</td>
-                                <td>{{ 'Yes' if permission.write_permission else 'No' }}</td>
-                                <td>{{ 'Yes' if permission.delete_permission else 'No' }}</td>
-                                <td><button class="edit-btn" onclick="openEditPermissionModal({{ permission.permission_id }})">Edit</button>
-                                    <button class="delete-btn" onclick="deletePermission({{ permission.permission_id }})">Delete</button></td>
+                                <th>Username</th>
+                                {% for dept in departments %}
+                                    <th>{{ dept.dept_name }}</th>
+                                {% endfor %}
                             </tr>
-                        {% endfor %}
+                        </thead>
+                        <tbody>
+                            {% for user in users %}
+                                {% if user.role_id not in [0, 1] %}
+                                    <tr>
+                                        <td>{{ user.username }}</td>
+                                        {% for dept in departments %}
+                                            <td>
+                                                {% set permission = user.permissions | selectattr('dept_id', 'equalto', dept.dept_id) | first %}
+                                                {% if permission %}
+                                                    <input type="checkbox" {% if permission.write_permission %} checked {% endif %} disabled> U
+                                                    <input type="checkbox" {% if permission.delete_permission %} checked {% endif %} disabled> D
+                                                {% else %}
+                                                    None
+                                                {% endif %}
+                                            </td>
+                                        {% endfor %}
+                                    </tr>
+                                {% endif %}
+                            {% endfor %}
+                        </tbody>
                     </table>
                     <button type="button" onclick="resetManagePermissions()">Back</button>
-                </div>
-
-                <!-- Modal for Editing Permissions -->
-                <div id="editPermissionModal" style="display: none;">
-                    <h3>Edit Permissions</h3>
-                    <form id="editPermissionForm" data-permission-id="">
-                        <label for="edit_write_permission">Write:</label>
-                        <input type="checkbox" name="write_permission" id="edit_write_permission">
-
-                        <label for="edit_delete_permission">Delete:</label>
-                        <input type="checkbox" name="delete_permission" id="edit_delete_permission">
-
-                        <button type="button" onclick="savePermissionChanges()">Save Changes</button>
-                        <button type="button" onclick="closeModal()">Cancel</button>
-                    </form>
                 </div>
             </div>
 
@@ -627,7 +622,7 @@
 
                                 row.innerHTML = `
                                     <label>${permission.dept_name}:</label>
-                                    <input type="checkbox" name="write_permission" value="${permission.dept_id}" ${permission.write_permission ? 'checked' : ''}> Write
+                                    <input type="checkbox" name="write_permission" value="${permission.dept_id}" ${permission.write_permission ? 'checked' : ''}> Upload
                                     <input type="checkbox" name="delete_permission" value="${permission.dept_id}" ${permission.delete_permission ? 'checked' : ''}> Delete
                                 `;
                                 permissionsContainer.appendChild(row);
@@ -639,130 +634,6 @@
                 }
             });
         });
-
-        function openEditPermissionModal(permissionId) {
-            fetch(`/get_permission_data/${permissionId}`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.error) {
-                        alert("Error fetching permission data");
-                        return;
-                    }
-
-                    // Populate modal fields
-                    document.getElementById('edit_write_permission').checked = data.write_permission;
-                    document.getElementById('edit_delete_permission').checked = data.delete_permission;
-
-                    // Store permission ID
-                    document.getElementById('editPermissionForm').setAttribute('data-permission-id', permissionId);
-
-                    // Show the modal
-                    document.getElementById('editPermissionModal').style.display = 'block';
-                })
-                .catch(err => {
-                    console.error("Error fetching permission data", err);
-                });
-        }
-
-        function savePermissionChanges() {
-            const userId = document.getElementById('editPermissionForm').getAttribute('data-user-id');
-            const updatedPermissions = [];
-
-            document.querySelectorAll('.department-permission').forEach((row) => {
-                const deptId = row.dataset.deptId;
-                const writePermission = row.querySelector('.write-permission').checked;
-                const deletePermission = row.querySelector('.delete-permission').checked;
-
-                updatedPermissions.push({
-                    dept_id: deptId,
-                    write_permission: writePermission,
-                    delete_permission: deletePermission
-                });
-            });
-
-            fetch('/update_permission', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    user_id: userId,
-                    permissions: updatedPermissions
-                }),
-            })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        alert("Permissions updated successfully!");
-                        location.reload();
-                    } else {
-                        alert(data.error);
-                    }
-                })
-                .catch(err => {
-                    console.error("Error updating permissions", err);
-                });
-        }
-
-
-        function closeModal() {
-            document.getElementById('editPermissionModal').style.display = 'none';
-        }
-
-        // Handle form submission (POST request to update permission)
-        document.getElementById('editPermissionForm').addEventListener('submit', function(event) {
-            event.preventDefault(); // Prevent the form from submitting normally
-
-            // Get the permission ID from the hidden attribute
-            const permissionId = document.getElementById('editPermissionForm').getAttribute('data-permission-id');
-
-            // Collect the data from the form
-            const write_permission = document.getElementById('write_permission').checked;
-            const delete_permission = document.getElementById('delete_permission').checked;
-
-            // Send the data to the server using a POST request
-            fetch('/update_permission', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    permission_id: permissionId,
-                    write_permission: write_permission,
-                    delete_permission: delete_permission
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    alert("Permissions updated successfully!");
-                    closeModal();  // Close the modal on success
-                } else {
-                    alert("Failed to update permissions.");
-                }
-            })
-            .catch(err => {
-                console.error("Error updating permission", err);
-            });
-        });
-
-        function deletePermission(permissionId) {
-            if (confirm("Are you sure you want to delete this permission? This action cannot be undone.")) {
-                fetch(`/delete_permission/${permissionId}`, {
-                    method: "DELETE"
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        alert("Permission deleted successfully!");
-                        location.reload(); // Reload the page to reflect changes
-                    } else {
-                        alert(data.error);
-                    }
-                })
-                .catch(err => {
-                    console.error("Error deleting permission:", err);
-                });
-            }
-        }
 
         function showAddDeptForm() {
             document.getElementById('manageDeptOptions').style.display = 'none';

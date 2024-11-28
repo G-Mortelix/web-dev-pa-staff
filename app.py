@@ -757,62 +757,6 @@ def get_permission_data(user_id):
 
     return jsonify(success=True, permissions=serialized_permissions)
 
-
-@app.route('/update_permission', methods=['POST'])
-@login_required
-@admin_required
-def update_permission():
-    data = request.get_json()
-    user_id = data.get('user_id')
-    updated_permissions = data.get('permissions')  # List of department permissions
-
-    if not user_id or not updated_permissions:
-        return jsonify(success=False, error="User ID and permissions are required"), 400
-
-    try:
-        for permission_data in updated_permissions:
-            dept_id = permission_data.get('dept_id')
-            permission = Permission.query.filter_by(user_id=user_id, dept_id=dept_id).first()
-
-            if permission:
-                permission.write_permission = permission_data.get('write_permission', permission.write_permission)
-                permission.delete_permission = permission_data.get('delete_permission', permission.delete_permission)
-            else:
-                # Add a new permission if it doesn't exist
-                new_permission = Permission(
-                    user_id=user_id,
-                    dept_id=dept_id,
-                    write_permission=permission_data.get('write_permission', False),
-                    delete_permission=permission_data.get('delete_permission', False)
-                )
-                db.session.add(new_permission)
-
-        db.session.commit()
-        return jsonify(success=True)
-    except Exception as e:
-        db.session.rollback()
-        return jsonify(success=False, error=str(e))
-    
-@app.route('/delete_permission/<int:permission_id>', methods=['DELETE'])
-@login_required
-@admin_required
-def delete_permission(permission_id):
-    permission = Permission.query.get(permission_id)
-    if not permission:
-        flash('Permission not found.', 'error')
-        return jsonify(success=False, error="Permission not found"), 404
-
-    try:
-        db.session.delete(permission)
-        db.session.commit()
-        flash('Permission successfully deleted.', 'success')
-        return jsonify(success=True)
-    except Exception as e:
-        db.session.rollback()
-        flash(f'Failed to delete permission: {e}', 'error')
-        return jsonify(success=False, error="Failed to delete permission."), 500
-
-
 # SECTION BREAKS!!
 # ROUTES FOR DEPARTMENTS
 @app.route('/add_department', methods=['POST'])
