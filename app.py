@@ -73,7 +73,11 @@ class Folder(db.Model):
     folder_id = db.Column(db.Integer, primary_key=True)
     folder_name = db.Column(db.String(100), nullable=False)
     dept_id = db.Column(db.Integer, db.ForeignKey('departments.dept_id'))
+    parent_folder_id = db.Column(db.Integer, db.ForeignKey('folders.folder_id'), nullable=True)  # Self-reference for parent folder
     time_created = db.Column(db.DateTime, default=db.func.current_timestamp())
+    
+    parent_folder = db.relationship('Folder', remote_side=[folder_id])  # Relationship to parent folder
+    child_folders = db.relationship('Folder', backref=db.backref('parent_folder', remote_side=[folder_id]), lazy='dynamic')  # Relationship to child folders
 
 class PDF(db.Model):
     __tablename__ = 'pdfs'
@@ -228,13 +232,14 @@ def home():
 # ROUTES FOR CONTENT MANAGEMENT
 @app.route('/add_folder', methods=['POST'])
 @login_required
-def add_folder():
+def add_folder():   
     if current_user.role_id not in [0, 1]:
         return jsonify(success=False, error="You do not have permission to add folders.")
 
     data = request.get_json()
     folder_name = data.get('folderName', '').strip()
     dept_name = data.get('deptName', '').strip()
+    parent_folder_name = data.get('parentFolderName', '').strip()  # New field for parent folder
 
     if not folder_name or not dept_name:
         return jsonify(success=False, error="Folder name and department name cannot be empty.")
@@ -242,6 +247,12 @@ def add_folder():
     department = Department.query.filter_by(dept_name=dept_name).first()
     if not department:
         return jsonify(success=False, error="Department not found.")
+    
+    parent_folder = None
+    if parent_folder_name:
+        parent_folder = Folder.query.filter_by(folder_name=parent_folder_name, dept_id=department.dept_id).first()
+        if not parent_folder:
+            return jsonify(success=False, error="Parent folder not found.")
 
     existing_folder = Folder.query.filter_by(folder_name=folder_name, dept_id=department.dept_id).first()
     if existing_folder:
@@ -250,15 +261,6 @@ def add_folder():
     # Create a new folder entry in the database
     new_folder = Folder(folder_name=folder_name, dept_id=department.dept_id)
     db.session.add(new_folder)
-
-    new_log = AuditLog(
-        user_id=current_user.user_id,
-        action="Created folder",
-        target_file=f"{sanitized_dept_name}/{sanitized_folder_name}",
-        ip_address=request.remote_addr,
-        extra_data={"department": dept_name}
-    )
-    db.session.add(new_log)
     db.session.commit()
 
     # Create the actual folder on the file system
@@ -286,11 +288,18 @@ def edit_folder():
     data = request.get_json()
     old_folder_name = data.get('oldFolderName', '').strip()
     new_folder_name = data.get('newFolderName', '').strip()
+    new_parent_folder_name = data.get('newParentFolderName', '').strip()  # New field for parent folder
 
     # Retrieve the folder based on the old folder name
     folder = Folder.query.filter_by(folder_name=old_folder_name).first()
     if not folder:
         return jsonify(success=False, error="Folder not found.")
+    
+    new_parent_folder = None
+    if new_parent_folder_name:
+        new_parent_folder = Folder.query.filter_by(folder_name=new_parent_folder_name, dept_id=folder.dept_id).first()
+        if not new_parent_folder:
+            return jsonify(success=False, error="New parent folder not found.")
 
     # Check if a folder with the new name already exists in the same department
     existing_folder = Folder.query.filter_by(folder_name=new_folder_name, dept_id=folder.dept_id).first()
@@ -314,6 +323,7 @@ def edit_folder():
 
         # Update the folder name in the database
         folder.folder_name = new_folder_name
+        folder.parent_folder_id = new_parent_folder.folder_id if new_parent_folder else None
 
         # Update PDF paths in the database
         pdfs = PDF.query.filter_by(folder_id=folder.folder_id).all()
@@ -323,18 +333,6 @@ def edit_folder():
 
             # Update the path in the database
             pdf.pdf_path = new_pdf_path
-        
-        new_log = AuditLog(
-            user_id=current_user.user_id,
-            action="Renamed folder",
-            target_file=f"{sanitized_dept_name}/{old_sanitized_folder_name}",
-            ip_address=request.remote_addr,
-            extra_data={
-                "new_folder_name": new_folder_name,
-                "department": department.dept_name
-            }
-        )
-        db.session.add(new_log)
 
         db.session.commit()
         return jsonify(success=True)
@@ -409,24 +407,15 @@ def delete_folder():
     # Define folder path for deletion from disk
     folder_path = os.path.join(app.static_folder, 'pdffile', sanitized_dept_name, sanitized_folder_name)
     
-    # Remove folder from database
-    db.session.delete(folder)
-    new_log = AuditLog(
-        user_id=current_user.user_id,
-        action="Deleted folder",
-        target_file=f"{sanitized_dept_name}/{sanitized_folder_name}",
-        ip_address=request.remote_addr,
-        extra_data={"department": department.dept_name}
-    )
-    db.session.add(new_log)
-    db.session.commit()
+    # Remove child folders recursively
+    def delete_recursive(folder):
+        for child in folder.child_folders:
+            delete_recursive(child)  # Recursively delete child folders
+        db.session.delete(folder)  # Delete the folder itself
 
-    try:
-        if os.path.exists(folder_path):
-            shutil.rmtree(folder_path)  # Delete the folder and all contents
-        return jsonify(success=True)
-    except Exception as e:
-        return jsonify(success=False, error=str(e))
+    delete_recursive(folder)
+    db.session.commit()
+    return jsonify(success=False, error=str(e))
     
 @app.route('/delete_pdf', methods=['POST'])
 @login_required

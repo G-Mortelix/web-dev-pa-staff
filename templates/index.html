@@ -74,6 +74,14 @@
                                 {% endif %}
                             </li>
                         {% endfor %}
+                        {% for child_folder in folder_data.child_folders %}
+                            <li class="folder-item">
+                                <!-- Recursive display of child folders -->
+                                <ul>
+                                    <li>{{ child_folder.folder_name }}</li>
+                                </ul>
+                            </li>
+                        {% endfor %}
                     </ul>
                 {% endfor %}
             {% endfor %}
@@ -190,16 +198,17 @@
             }
         }
 
-        function addFolder(deptName) {
+        function addFolder(deptName, parentFolder = null) {
             const folderName = prompt("Enter the name of the new folder:");
-
+            
             if (folderName && deptName) {
+                const parentFolderPath = parentFolder ? parentFolder : "";
                 fetch('/add_folder', {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json"
                     },
-                    body: JSON.stringify({ folderName, deptName })
+                    body: JSON.stringify({ folderName, deptName, parentFolder: parentFolderPath })
                 })
                 .then(response => response.json())
                 .then(data => {
@@ -243,7 +252,7 @@
             pdfFileInput.click();
         }
 
-        function editFolderPrompt(folderName) {
+        function editFolderPrompt(folderName, parentFolder = null) {
             const newFolderName = prompt("Enter the new name for the folder:", folderName);
             if (newFolderName && newFolderName !== folderName) {
                 fetch('/edit_folder', {
@@ -251,7 +260,7 @@
                     headers: {
                         "Content-Type": "application/json"
                     },
-                    body: JSON.stringify({ oldFolderName: folderName, newFolderName: newFolderName })
+                    body: JSON.stringify({ oldFolderName: folderName, newFolderName: newFolderName, parentFolder })
                 })
                 .then(response => response.json())
                 .then(data => {
@@ -265,12 +274,12 @@
             }
         }
 
-        function deleteFolder(folderName) {
+        function deleteFolder(folderName, parentFolder = null) {
             if (confirm(`Are you sure you want to delete folder "${folderName}"? This action cannot be undone.`)) {
                 fetch('/delete_folder', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ folderName: folderName })
+                    body: JSON.stringify({ folderName, parentFolder })
                 })
                 .then(response => response.json())
                 .then(data => {
