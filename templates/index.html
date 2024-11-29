@@ -31,6 +31,7 @@
     
     <div class="container">
         <aside class="sidebar" id="resizableSidebar">
+            <!-- Add a subfolder button next to each folder -->
             {% for department, folders in pdf_structure.items() %}
                 <div class="department-container">
                     <h2 class="department-heading">{{ department }}</h2>
@@ -41,7 +42,7 @@
                         </span>
                     {% endif %}
                 </div>
-    
+
                 {% for folder_name, folder_data in folders.items() %}
                     <div class="folder-container">
                         <span class="folder-icon">
@@ -62,6 +63,11 @@
                                 <img src="{{ url_for('static', filename='icons/delete.png') }}" 
                                 onclick="deleteFolder('{{ folder_name }}')" class="delete-icon" alt="Delete">
                             {% endif %}
+                            <!-- Add subfolder button -->
+                            {% if current_user.role_id == 1 or current_user.role_id == 0 %}
+                                <img src="{{ url_for('static', filename='icons/add-folder.png') }}" 
+                                onclick="addSubfolder('{{ folder_name }}', '{{ department }}')" class="add-subfolder-icon" alt="Add Subfolder">
+                            {% endif %}
                         </span>
                     </div>
                     <ul>
@@ -76,7 +82,6 @@
                         {% endfor %}
                         {% for child_folder in folder_data.child_folders %}
                             <li class="folder-item">
-                                <!-- Recursive display of child folders -->
                                 <ul>
                                     <li>{{ child_folder.folder_name }}</li>
                                 </ul>
@@ -222,6 +227,41 @@
                 alert("Folder name and department name are required.");
             }
         }
+
+        function addSubfolder(folderName, departmentName) {
+            let parentFolderName = folderName; // The current folder becomes the parent folder
+            let newFolderName = prompt("Enter the subfolder name:");
+
+            if (!newFolderName) {
+                return;
+            }
+
+            // Send AJAX request to add subfolder
+            $.ajax({
+                url: '/add_subfolder',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    folderName: newFolderName,
+                    deptName: departmentName,
+                    parentFolderName: parentFolderName
+                }),
+                success: function(response) {
+                    if (response.success) {
+                        // Add the subfolder to the folder UI dynamically
+                        let folderElement = $(`.folder-name:contains(${folderName})`).closest('.folder-container');
+                        let subfolderList = folderElement.find('ul');
+                        subfolderList.append(`<li>${newFolderName}</li>`);  // Add new subfolder to the list
+                    } else {
+                        alert(response.error);
+                    }
+                },
+                error: function(error) {
+                    alert("Error adding subfolder.");
+                }
+            });
+        }
+
 
         function addPDF(folderName) {
             const pdfFileInput = document.createElement("input");

@@ -2,11 +2,20 @@ mhm this is pretty much the overall functions, but ill explain a bit more to cla
 
 its an internal website, have two types of user: admin and user
 
-for admin:
-- can manage the add/edit/delete folder and add/delete pdf files
-- register new user and admin, delete existing user or admin
+for master admin: 
+- register new user and admin, and delete or edit them
 - add/delete/edit permission for user
 - add/delete dept
+- add/delete/edit folders
+- see all the dept files and folders
+
+
+for admin:
+- can manage the add/edit/delete folder and add/delete pdf files
+- register new user, delete or edit existing user
+- add/delete/edit permission for user
+- add/delete dept
+- add/delete/edit folders
 - see all the dept files and folders
 
 for users:
@@ -15,3 +24,4 @@ for users:
 - each users, have default permission to read the files in their dept
 - users with permissions can upload files into the folder of their dept, and delete the file from folder of their dept
 - permissions that are managed by admin for the user are: upload file and delete file. these r not mutually exclusive, meaning one user can have both permission, or either one of them, or none at all, for users with no permissions, they will follow the default permission - read file
+- rn, the relationship between users and depts are many to many. so one user can have at max 4 dept associated with

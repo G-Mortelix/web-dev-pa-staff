@@ -2,9 +2,9 @@ import os, re, shutil
 from functools import wraps
 from dotenv import load_dotenv
 from flask_migrate import Migrate
+from sqlalchemy import ForeignKey
+from sqlalchemy.orm import Session
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import case, ForeignKey
-from sqlalchemy.orm import relationship
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
@@ -29,7 +29,6 @@ migrate = Migrate (app, db)
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
-
 
 # SECTION BREAKS!!
 # DATABASE MODELS
@@ -68,16 +67,31 @@ class UserDepartment(db.Model):
     user = db.relationship('User', backref=db.backref('user_departments', cascade="all, delete-orphan"))
     department = db.relationship('Department', backref=db.backref('user_departments', cascade="all, delete-orphan"))
 
+# Updated model with backref renaming
 class Folder(db.Model):
     __tablename__ = 'folders'
+
     folder_id = db.Column(db.Integer, primary_key=True)
     folder_name = db.Column(db.String(100), nullable=False)
     dept_id = db.Column(db.Integer, db.ForeignKey('departments.dept_id'))
     parent_folder_id = db.Column(db.Integer, db.ForeignKey('folders.folder_id'), nullable=True)  # Self-reference for parent folder
     time_created = db.Column(db.DateTime, default=db.func.current_timestamp())
     
-    parent_folder = db.relationship('Folder', remote_side=[folder_id])  # Relationship to parent folder
-    child_folders = db.relationship('Folder', backref=db.backref('parent_folder', remote_side=[folder_id]), lazy='dynamic')  # Relationship to child folders
+    # Relationship to parent folder
+    parent_folder = db.relationship('Folder', remote_side=[folder_id])
+
+    # Relationship to child folders with 'overlaps' to avoid warning
+    child_folders = db.relationship(
+        'Folder', 
+        backref=db.backref('parent_folder_relation', remote_side=[folder_id]), 
+        lazy='dynamic', 
+        overlaps="parent_folder"  # Prevents conflict between parent_folder and child_folders
+    )
+
+    __table_args__ = (
+        db.Index('ix_folders_dept_id', 'dept_id'),
+        db.Index('ix_folders_parent_folder_id', 'parent_folder_id'),
+    )
 
 class PDF(db.Model):
     __tablename__ = 'pdfs'
@@ -166,9 +180,6 @@ def login():
     return render_template('login.html')
 
 
-# PARTITION FIRST!!!
-# FUNCTIONS BELOW ARE ALL ASSOCIATED WITH THE HOMEPAGE
-
 @app.route('/home')
 @login_required
 def home():
@@ -215,16 +226,24 @@ def home():
 
         sorted_folders = sorted(folders, key=folder_sort_key)
 
+        # Include child folders (subfolders) for each parent folder
         for folder in sorted_folders:
             sanitized_folder_name = sanitize_folder_name(folder.folder_name)
             pdfs = PDF.query.filter_by(folder_id=folder.folder_id).all()
             pdf_files = [pdf.pdf_name for pdf in pdfs]
+
+            # Get child folders (subfolders) for the current folder
+            child_folders = Folder.query.filter_by(parent_folder_id=folder.folder_id).all()
+
             pdf_structure[department.dept_name][sanitized_folder_name] = {
                 "files": pdf_files,
-                "dept_id": folder.dept_id
+                "dept_id": folder.dept_id,
+                "parent_folder_id": folder.folder_id,
+                "child_folders": child_folders  # Adding child folders to the structure
             }
 
     return render_template('index.html', pdf_structure=pdf_structure, permissions=permissions)
+
 
 
 
@@ -270,6 +289,46 @@ def add_folder():
     os.makedirs(folder_path, exist_ok=True)
 
     return jsonify(success=True)
+
+@app.route('/add_subfolder', methods=['POST'])
+@login_required
+def add_subfolder():
+    if current_user.role_id not in [0, 1]:
+        return jsonify(success=False, error="You do not have permission to add subfolders.")
+
+    data = request.get_json()
+    folder_name = data.get('folderName', '').strip()
+    dept_name = data.get('deptName', '').strip()
+    parent_folder_name = data.get('parentFolderName', '').strip()  # Parent folder for subfolder
+
+    if not folder_name or not dept_name or not parent_folder_name:
+        return jsonify(success=False, error="Folder name, department name, and parent folder name cannot be empty.")
+
+    department = Department.query.filter_by(dept_name=dept_name).first()
+    if not department:
+        return jsonify(success=False, error="Department not found.")
+
+    parent_folder = Folder.query.filter_by(folder_name=parent_folder_name, dept_id=department.dept_id).first()
+    if not parent_folder:
+        return jsonify(success=False, error="Parent folder not found.")
+
+    existing_folder = Folder.query.filter_by(folder_name=folder_name, dept_id=department.dept_id).first()
+    if existing_folder:
+        return jsonify(success=False, error="Folder with the same name already exists in this department.")
+
+    # Create a new subfolder entry in the database, with parent_folder_id
+    new_folder = Folder(folder_name=folder_name, dept_id=department.dept_id, parent_folder_id=parent_folder.folder_id)
+    db.session.add(new_folder)
+    db.session.commit()
+
+    # Create the actual folder on the file system
+    sanitized_folder_name = sanitize_folder_name(folder_name)
+    sanitized_dept_name = sanitize_folder_name(dept_name)
+    folder_path = os.path.join(app.static_folder, 'pdffile', sanitized_dept_name, sanitized_folder_name)
+    os.makedirs(folder_path, exist_ok=True)
+
+    return jsonify(success=True)
+
 
 def sanitize_folder_name(name):
     """

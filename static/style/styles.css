@@ -243,7 +243,7 @@ header {
 .sidebar {
     min-width: 150px; 
     max-width: 400px;
-    width: 250px;
+    width: 350px;
     padding: 20px;
     overflow-y: auto;
     background-color: #f4f4f4;
@@ -338,6 +338,12 @@ header {
 .folder-icons .edit-folder-icon, 
 .folder-icons .delete-icon {
     width: 12px;
+    cursor: pointer;
+    margin-left: 5px;
+}
+
+.folder-icons .add-subfolder-icon {
+    width: 15px;
     cursor: pointer;
     margin-left: 5px;
 }
