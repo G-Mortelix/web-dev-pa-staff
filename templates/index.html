@@ -7,6 +7,8 @@
     <script>
         pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.worker.min.js";
     </script>
+    <!-- Add jQuery CDN before your script -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 </head>
 <body>
     <header>
@@ -31,7 +33,6 @@
     
     <div class="container">
         <aside class="sidebar" id="resizableSidebar">
-            <!-- Add a subfolder button next to each folder -->
             {% for department, folders in pdf_structure.items() %}
                 <div class="department-container">
                     <h2 class="department-heading">{{ department }}</h2>
@@ -70,6 +71,35 @@
                             {% endif %}
                         </span>
                     </div>
+
+                    <!-- Check if this folder has subfolders -->
+                    {% if folder_data.child_folders %}
+                        <div class="subfolder-container">
+                            <ul>
+                                {% for child_folder in folder_data.child_folders %}
+                                    <span class="subfolder-icon">
+                                        <img src="{{ url_for('static', filename='icons/folder.png') }}" alt="Folder Icon">
+                                    </span>
+                                    <span class="subfolder-name">{{ child_folder.folder_name }}</span>
+                                    <span class="subfolder-icons">
+                                        {% if current_user.role_id == 1 or current_user.role_id == 0 %}
+                                            <img src="{{ url_for('static', filename='icons/add-file.png') }}" 
+                                            onclick="addPDF('{{ child_folder.folder_name }}')" class="add-pdf-icon" alt="Add PDF">
+                                        {% endif %}
+                                        {% if current_user.role_id == 1 or current_user.role_id == 0 %}
+                                            <img src="{{ url_for('static', filename='icons/edit.png') }}" 
+                                            onclick="editFolderPrompt('{{ child_folder.folder_name }}')" class="edit-folder-icon" alt="Edit">
+                                        {% endif %}
+                                        {% if current_user.role_id == 1 or current_user.role_id == 0 %}
+                                            <img src="{{ url_for('static', filename='icons/delete.png') }}" 
+                                            onclick="deleteFolder('{{ child_folder.folder_name }}')" class="delete-icon" alt="Delete">
+                                        {% endif %}
+                                    </span>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    {% endif %}
+
                     <ul>
                         {% for pdf in folder_data.files %}
                             <li class="pdf-item">
@@ -78,13 +108,6 @@
                                     <img src="{{ url_for('static', filename='icons/delete.png') }}" 
                                     onclick="deletePDF('{{ folder_name }}', '{{ pdf }}')" class="delete-pdf-icon" alt="Delete">
                                 {% endif %}
-                            </li>
-                        {% endfor %}
-                        {% for child_folder in folder_data.child_folders %}
-                            <li class="folder-item">
-                                <ul>
-                                    <li>{{ child_folder.folder_name }}</li>
-                                </ul>
                             </li>
                         {% endfor %}
                     </ul>
@@ -218,6 +241,7 @@
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
+                        alert("Folder added successfully!");
                         location.reload(); // Reload the page to show the new folder
                     } else {
                         alert(data.error);
@@ -248,9 +272,16 @@
                 }),
                 success: function(response) {
                     if (response.success) {
-                        // Add the subfolder to the folder UI dynamically
-                        let folderElement = $(`.folder-name:contains(${folderName})`).closest('.folder-container');
-                        let subfolderList = folderElement.find('ul');
+                        // Find the parent folder and add the subfolder to its list
+                        let parentFolderElement = $(`.folder-name:contains(${folderName})`).closest('.folder-container');
+                        
+                        // If parent folder does not have a subfolder list, create it
+                        if (parentFolderElement.find('ul').length === 0) {
+                            parentFolderElement.append('<ul></ul>');
+                        }
+                        
+                        // Append the new subfolder
+                        let subfolderList = parentFolderElement.find('ul');
                         subfolderList.append(`<li>${newFolderName}</li>`);  // Add new subfolder to the list
                     } else {
                         alert(response.error);
@@ -261,7 +292,6 @@
                 }
             });
         }
-
 
         function addPDF(folderName) {
             const pdfFileInput = document.createElement("input");

@@ -246,7 +246,6 @@ def home():
 
 
 
-
 # SECTION BREAK!!
 # ROUTES FOR CONTENT MANAGEMENT
 @app.route('/add_folder', methods=['POST'])

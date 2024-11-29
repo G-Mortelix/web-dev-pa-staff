@@ -315,20 +315,20 @@ header {
 }
 
 /* folder layout */
-.folder-container {
+.folder-container, .subfolder-container{
     display: flex;
     align-items: center;
     justify-content: space-between;
 }
 
 /* folder icon size */
-.folder-icon img {
+.folder-icon img, .subfolder-icon img{
     width: 18px;
     margin-right: 10px;
 }
 
 /* folder name design */
-.folder-name {
+.folder-name, .subfolder-name{
     flex-grow: 1;
     overflow-wrap: break-word;
 }
@@ -337,6 +337,14 @@ header {
 .folder-icons .add-pdf-icon, 
 .folder-icons .edit-folder-icon, 
 .folder-icons .delete-icon {
+    width: 12px;
+    cursor: pointer;
+    margin-left: 5px;
+}
+
+.subfolder-icons .add-pdf-icon, 
+.subfolder-icons .edit-folder-icon, 
+.subfolder-icons .delete-icon {
     width: 12px;
     cursor: pointer;
     margin-left: 5px;
