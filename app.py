@@ -80,7 +80,7 @@ class Folder(db.Model):
     # Relationship to parent folder
     parent_folder = db.relationship('Folder', remote_side=[folder_id])
 
-    # Relationship to child folders with 'overlaps' to avoid warning
+    # Relationship to child folders
     child_folders = db.relationship(
         'Folder', 
         backref=db.backref('parent_folder_relation', remote_side=[folder_id]), 
@@ -92,6 +92,10 @@ class Folder(db.Model):
         db.Index('ix_folders_dept_id', 'dept_id'),
         db.Index('ix_folders_parent_folder_id', 'parent_folder_id'),
     )
+
+    def __repr__(self):
+        return f"Folder({self.folder_name}, Parent: {self.parent_folder.folder_name if self.parent_folder else 'None'})"
+
 
 class PDF(db.Model):
     __tablename__ = 'pdfs'
@@ -180,6 +184,53 @@ def login():
     return render_template('login.html')
 
 
+# Utility function to handle the folder path sanitization and retrieval
+def get_sanitized_folder_path(department_name, folder_name):
+    """
+    Returns the sanitized path for a given folder under a department.
+    """
+    sanitized_folder_name = sanitize_folder_name(folder_name)
+    sanitized_dept_name = sanitize_folder_name(department_name)
+    return os.path.join(app.static_folder, 'pdffile', sanitized_dept_name, sanitized_folder_name)
+
+@app.route('/get_folders', methods=['GET'])
+@login_required
+def get_folders():
+    # Fetch the department data for the current user
+    department = Department.query.filter_by(user_id=current_user.id).first()
+
+    # Fetch all top-level folders (where parent_folder_id is None)
+    folders = Folder.query.filter_by(dept_id=department.dept_id, parent_folder_id=None).all()
+
+    folder_data = {}
+    
+    # For each folder, gather its child folders and PDFs
+    for folder in folders:
+        child_folders = Folder.query.filter_by(parent_folder_id=folder.folder_id).all()
+        pdf_files = PDF.query.filter_by(folder_id=folder.folder_id).all()
+
+        # Initialize the folder data with children and files
+        folder_data[folder.folder_name] = {
+            'folder_id': folder.folder_id,
+            'dept_id': folder.dept_id,
+            'child_folders': [],  # Start with empty list for child folders
+            'files': [pdf.pdf_name for pdf in pdf_files]
+        }
+
+        # Now iterate over the child folders and nest them under their parent
+        for child in child_folders:
+            subchild_folders = Folder.query.filter_by(parent_folder_id=child.folder_id).all()
+            child_folder_data = {
+                'folder_name': child.folder_name,
+                'folder_id': child.folder_id,
+                'child_folders': [{'folder_name': subchild.folder_name, 'folder_id': subchild.folder_id} for subchild in subchild_folders]
+            }
+            folder_data[folder.folder_name]['child_folders'].append(child_folder_data)
+
+    # Render the template with the folder data
+    return render_template('index.html', folders=folder_data, department=department)
+
+
 @app.route('/home')
 @login_required
 def home():
@@ -215,18 +266,18 @@ def home():
 
     # Build PDF structure for accessible departments
     for department in departments:
-        folders = Folder.query.filter_by(dept_id=department.dept_id).all()
+        # Fetch all top-level folders (where parent_folder_id is None)
+        folders = Folder.query.filter_by(dept_id=department.dept_id, parent_folder_id=None).all()
         pdf_structure[department.dept_name] = {}
 
         # Sort folders by numeric values (including decimals with two places)
         def folder_sort_key(folder):
             parts = re.split(r'(\d+(?:\.\d{1,2})?)', folder.folder_name)
-            # Convert numeric parts to float for proper sorting
             return [float(part) if part.replace('.', '', 1).isdigit() else part.lower() for part in parts]
 
         sorted_folders = sorted(folders, key=folder_sort_key)
 
-        # Include child folders (subfolders) for each parent folder
+        # Loop through each folder and fetch its children
         for folder in sorted_folders:
             sanitized_folder_name = sanitize_folder_name(folder.folder_name)
             pdfs = PDF.query.filter_by(folder_id=folder.folder_id).all()
@@ -235,12 +286,31 @@ def home():
             # Get child folders (subfolders) for the current folder
             child_folders = Folder.query.filter_by(parent_folder_id=folder.folder_id).all()
 
+            # Map the folder and its child folders (recursive if needed)
             pdf_structure[department.dept_name][sanitized_folder_name] = {
                 "files": pdf_files,
                 "dept_id": folder.dept_id,
                 "parent_folder_id": folder.folder_id,
-                "child_folders": child_folders  # Adding child folders to the structure
+                "child_folders": []  # Initialize an empty list for child folders
             }
+
+            # For each child folder, add subfolders
+            for child in child_folders:
+                child_data = {
+                    'folder_name': child.folder_name,
+                    'folder_id': child.folder_id,
+                    'child_folders': []  # Empty by default
+                }
+                
+                # Get subchild folders (sub-subfolders)
+                subchild_folders = Folder.query.filter_by(parent_folder_id=child.folder_id).all()
+                child_data['child_folders'] = [
+                    {'folder_name': subchild.folder_name, 'folder_id': subchild.folder_id}
+                    for subchild in subchild_folders
+                ]
+
+                # Add the child data to the current folder structure
+                pdf_structure[department.dept_name][sanitized_folder_name]["child_folders"].append(child_data)
 
     return render_template('index.html', pdf_structure=pdf_structure, permissions=permissions)
 
@@ -257,7 +327,7 @@ def add_folder():
     data = request.get_json()
     folder_name = data.get('folderName', '').strip()
     dept_name = data.get('deptName', '').strip()
-    parent_folder_name = data.get('parentFolderName', '').strip()  # New field for parent folder
+    parent_folder_name = data.get('parentFolderName', '').strip()  # Parent folder (may be None)
 
     if not folder_name or not dept_name:
         return jsonify(success=False, error="Folder name and department name cannot be empty.")
@@ -267,17 +337,18 @@ def add_folder():
         return jsonify(success=False, error="Department not found.")
     
     parent_folder = None
-    if parent_folder_name:
+    if parent_folder_name:  # Ensure it's properly assigned
         parent_folder = Folder.query.filter_by(folder_name=parent_folder_name, dept_id=department.dept_id).first()
         if not parent_folder:
             return jsonify(success=False, error="Parent folder not found.")
 
+    # Ensure folder doesn't already exist in the department
     existing_folder = Folder.query.filter_by(folder_name=folder_name, dept_id=department.dept_id).first()
     if existing_folder:
         return jsonify(success=False, error="Folder with the same name already exists in this department.")
 
-    # Create a new folder entry in the database
-    new_folder = Folder(folder_name=folder_name, dept_id=department.dept_id)
+    # Create the new folder
+    new_folder = Folder(folder_name=folder_name, dept_id=department.dept_id, parent_folder_id=parent_folder.folder_id if parent_folder else None)
     db.session.add(new_folder)
     db.session.commit()
 
@@ -315,19 +386,18 @@ def add_subfolder():
     if existing_folder:
         return jsonify(success=False, error="Folder with the same name already exists in this department.")
 
-    # Create a new subfolder entry in the database, with parent_folder_id
+    # Create the subfolder with the correct parent_folder_id
     new_folder = Folder(folder_name=folder_name, dept_id=department.dept_id, parent_folder_id=parent_folder.folder_id)
     db.session.add(new_folder)
     db.session.commit()
 
-    # Create the actual folder on the file system
+    # Create the actual subfolder on the file system
     sanitized_folder_name = sanitize_folder_name(folder_name)
     sanitized_dept_name = sanitize_folder_name(dept_name)
     folder_path = os.path.join(app.static_folder, 'pdffile', sanitized_dept_name, sanitized_folder_name)
     os.makedirs(folder_path, exist_ok=True)
 
     return jsonify(success=True)
-
 
 def sanitize_folder_name(name):
     """
@@ -447,9 +517,10 @@ def upload_pdf():
 @app.route('/delete_folder', methods=['POST'])
 @login_required
 def delete_folder():
+    # Check if the user has permission to delete folders
     if current_user.role_id not in [0, 1]:
         return jsonify(success=False, error="You do not have permission to delete folders.")
-    
+
     data = request.get_json()
     folder_name = data.get('folderName', '').strip()
 
@@ -458,22 +529,49 @@ def delete_folder():
     if not folder:
         return jsonify(success=False, error="Folder not found.")
 
+    # Define folder paths for deletion (sanitize)
     department = Department.query.get(folder.dept_id)
     sanitized_folder_name = sanitize_folder_name(folder_name)
     sanitized_dept_name = sanitize_folder_name(department.dept_name)
-
-    # Define folder path for deletion from disk
     folder_path = os.path.join(app.static_folder, 'pdffile', sanitized_dept_name, sanitized_folder_name)
-    
-    # Remove child folders recursively
-    def delete_recursive(folder):
-        for child in folder.child_folders:
-            delete_recursive(child)  # Recursively delete child folders
-        db.session.delete(folder)  # Delete the folder itself
 
-    delete_recursive(folder)
-    db.session.commit()
-    return jsonify(success=False, error=str(e))
+    # Define a recursive function to delete child folders and the folder itself
+    def delete_recursive(folder):
+        # Delete all child folders recursively
+        child_folders = Folder.query.filter_by(parent_folder_id=folder.folder_id).all()
+        for child_folder in child_folders:
+            delete_recursive(child_folder)
+        
+        # Delete PDFs in this folder before removing it
+        pdfs = PDF.query.filter_by(folder_id=folder.folder_id).all()
+        for pdf in pdfs:
+            pdf_path = os.path.join(app.static_folder, 'pdffile', sanitized_dept_name, sanitized_folder_name, pdf.pdf_name)
+            try:
+                if os.path.exists(pdf_path):
+                    os.remove(pdf_path)
+                db.session.delete(pdf)
+            except Exception as e:
+                db.session.rollback()
+                return jsonify(success=False, error=f"Failed to delete PDF: {e}")
+
+        # After deleting child PDFs, remove the folder itself from the database
+        db.session.delete(folder)
+
+    try:
+        # Start the recursive deletion from the current folder
+        delete_recursive(folder)
+        
+        # After all children and the folder are deleted, commit the session
+        db.session.commit()
+        
+        # Finally, remove the folder itself from the filesystem
+        if os.path.exists(folder_path):
+            os.rmdir(folder_path)
+
+        return jsonify(success=True)
+    except Exception as e:
+        db.session.rollback()
+        return jsonify(success=False, error=f"Failed to delete folder: {e}")
     
 @app.route('/delete_pdf', methods=['POST'])
 @login_required

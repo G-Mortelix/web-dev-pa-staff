@@ -344,7 +344,17 @@ header {
 
 .subfolder-icons .add-pdf-icon, 
 .subfolder-icons .edit-folder-icon, 
-.subfolder-icons .delete-icon {
+.subfolder-icons .delete-icon,
+.subfolder-icons .add-subfolder-icon {
+    width: 12px;
+    cursor: pointer;
+    margin-left: 5px;
+}
+
+.subsubfolder-icons .add-pdf-icon, 
+.subsubfolder-icons .edit-folder-icon, 
+.subsubfolder-icons .delete-icon,
+.subsubfolder-icon .folder-icon {
     width: 12px;
     cursor: pointer;
     margin-left: 5px;
