@@ -53,25 +53,35 @@
                         <span class="folder-icons">
                             {% set perm = permissions.get(folder_data.dept_id, {'write': False, 'delete': False}) %}
                             {% if current_user.role_id == 1 or current_user.role_id == 0 or perm['write'] %}
-                                <img src="{{ url_for('static', filename='icons/add-file.png') }}" 
-                                    onclick="addPDF('{{ folder_name }}')" class="add-pdf-icon" alt="Add PDF">
+                                <img src="{{ url_for('static', filename='icons/add-file.png') }}" onclick="addPDF('{{ folder_name }}')" class="add-pdf-icon" alt="Add PDF">
                             {% endif %}
                             {% if current_user.role_id == 1 or current_user.role_id == 0 %}
-                                <img src="{{ url_for('static', filename='icons/edit.png') }}" 
-                                    onclick="editFolderPrompt('{{ folder_name }}')" class="edit-folder-icon" alt="Edit">
+                                <img src="{{ url_for('static', filename='icons/edit.png') }}" onclick="editFolderPrompt('{{ folder_name }}')" class="edit-folder-icon" alt="Edit">
                             {% endif %}
                             {% if current_user.role_id == 1 or current_user.role_id == 0 %}
-                                <img src="{{ url_for('static', filename='icons/delete.png') }}" 
-                                    onclick="deleteFolder('{{ folder_name }}')" class="delete-icon" alt="Delete">
+                                <img src="{{ url_for('static', filename='icons/delete.png') }}" onclick="deleteFolder('{{ folder_name }}')" class="delete-icon" alt="Delete">
                             {% endif %}
                             <!-- Add subfolder button -->
                             {% if current_user.role_id == 1 or current_user.role_id == 0 %}
-                                <img src="{{ url_for('static', filename='icons/add-folder.png') }}" 
-                                    onclick="addSubfolder('{{ folder_name }}', '{{ department }}')" class="add-subfolder-icon" alt="Add Subfolder">
+                                <img src="{{ url_for('static', filename='icons/add-folder.png') }}" onclick="addSubfolder('{{ folder_name }}', '{{ department }}')" class="add-subfolder-icon" alt="Add Subfolder">
                             {% endif %}
                         </span>
                     </div>
-    
+
+                    <!-- Display PDFs in the parent folder -->
+                    {% if folder_data.files %}
+                        <ul>
+                            {% for pdf in folder_data.files %}
+                                <li class="pdf-item">
+                                    <a href="#" onclick="loadPDF('{{ pdf }}', '{{ department }}', '{{ folder_name }}'); return false;">{{ pdf }}</a>
+                                    {% if current_user.role_id == 1 or current_user.role_id == 0 or perm['delete'] %}
+                                        <img src="{{ url_for('static', filename='icons/delete.png') }}" onclick="deletePDF('{{ folder_name }}', '{{ pdf }}')" class="delete-pdf-icon" alt="Delete">
+                                    {% endif %}
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    {% endif %}
+
                     <!-- Display child folders, if any -->
                     {% if folder_data.child_folders %}
                         <div class="subfolder-container">
@@ -84,50 +94,71 @@
                                         <span class="subfolder-name">{{ child_folder.folder_name }}</span>
                                         <span class="subfolder-icons">
                                             {% if current_user.role_id == 1 or current_user.role_id == 0 %}
-                                                <img src="{{ url_for('static', filename='icons/add-file.png') }}" 
-                                                    onclick="addPDF('{{ child_folder.folder_name }}')" class="add-pdf-icon" alt="Add PDF">
+                                                <img src="{{ url_for('static', filename='icons/add-file.png') }}" onclick="addPDF('{{ child_folder.folder_name }}')" class="add-pdf-icon" alt="Add PDF">
                                             {% endif %}
                                             {% if current_user.role_id == 1 or current_user.role_id == 0 %}
-                                                <img src="{{ url_for('static', filename='icons/edit.png') }}" 
-                                                    onclick="editFolderPrompt('{{ child_folder.folder_name }}')" class="edit-folder-icon" alt="Edit">
+                                                <img src="{{ url_for('static', filename='icons/edit.png') }}" onclick="editFolderPrompt('{{ child_folder.folder_name }}')" class="edit-folder-icon" alt="Edit">
                                             {% endif %}
                                             {% if current_user.role_id == 1 or current_user.role_id == 0 %}
-                                                <img src="{{ url_for('static', filename='icons/delete.png') }}" 
-                                                    onclick="deleteFolder('{{ child_folder.folder_name }}')" class="delete-icon" alt="Delete">
+                                                <img src="{{ url_for('static', filename='icons/delete.png') }}" onclick="deleteFolder('{{ child_folder.folder_name }}')" class="delete-icon" alt="Delete">
                                             {% endif %}
                                             <!-- Add subfolder button for child folder -->
                                             {% if current_user.role_id == 1 or current_user.role_id == 0 %}
-                                                <img src="{{ url_for('static', filename='icons/add-folder.png') }}" 
-                                                    onclick="addSubfolder('{{ child_folder.folder_name }}', '{{ department }}')" class="add-subfolder-icon" alt="Add Subfolder">
+                                                <img src="{{ url_for('static', filename='icons/add-folder.png') }}" onclick="addSubfolder('{{ child_folder.folder_name }}', '{{ department }}')" class="add-subfolder-icon" alt="Add Subfolder">
                                             {% endif %}
                                         </span>
                                     </li>
-                                    <!-- Display subchild folders (subfolders of the child) -->
+
+                                    <!-- Display child PDFs in the child folder if any -->
+                                    {% if child_folder.files %}
+                                        <ul>
+                                            {% for pdf in child_folder.files %}
+                                                <li class="pdf-item">
+                                                    <a href="#" onclick="loadPDF('{{ pdf }}', '{{ department }}', '{{ folder_name }}','{{ child_folder.folder_name }}'); return false;">{{ pdf }}</a>
+                                                    {% if current_user.role_id == 1 or current_user.role_id == 0 or perm['delete'] %}
+                                                        <img src="{{ url_for('static', filename='icons/delete.png') }}" onclick="deletePDF('{{ child_folder.folder_name }}', '{{ pdf }}')" class="delete-pdf-icon" alt="Delete">
+                                                    {% endif %}
+                                                </li>
+                                            {% endfor %}
+                                        </ul>
+                                    {% endif %}
+
+                                    <!-- Display subfolders of the child folder (subfolders) -->
                                     {% if child_folder.child_folders %}
                                         <div class="subsubfolder-container">
                                             <ul>
-                                                {% for subchild in child_folder.child_folders %}
+                                                {% for subfolder in child_folder.child_folders %}
                                                     <li class="subsubfolder-item">
                                                         <span class="subsubfolder-icon">
-                                                            <img src="{{ url_for('static', filename='icons/folder.png') }}" alt="Folder Icon"
-                                                            class="folder-icon">
+                                                            <img src="{{ url_for('static', filename='icons/folder.png') }}" alt="Folder Icon">
                                                         </span>
-                                                        <span class="subsubfolder-name">{{ subchild.folder_name }}</span>
+                                                        <span class="subsubfolder-name">{{ subfolder.folder_name }}</span>
                                                         <span class="subsubfolder-icons">
                                                             {% if current_user.role_id == 1 or current_user.role_id == 0 %}
-                                                                <img src="{{ url_for('static', filename='icons/add-file.png') }}" 
-                                                                    onclick="addPDF('{{ subchild.folder_name }}')" class="add-pdf-icon" alt="Add PDF">
+                                                                <img src="{{ url_for('static', filename='icons/add-file.png') }}" onclick="addPDF('{{ subfolder.folder_name }}')" class="add-pdf-icon" alt="Add PDF">
                                                             {% endif %}
                                                             {% if current_user.role_id == 1 or current_user.role_id == 0 %}
-                                                                <img src="{{ url_for('static', filename='icons/edit.png') }}" 
-                                                                    onclick="editFolderPrompt('{{ subchild.folder_name }}')" class="edit-folder-icon" alt="Edit">
+                                                                <img src="{{ url_for('static', filename='icons/edit.png') }}" onclick="editFolderPrompt('{{ subfolder.folder_name }}')" class="edit-folder-icon" alt="Edit">
                                                             {% endif %}
                                                             {% if current_user.role_id == 1 or current_user.role_id == 0 %}
-                                                                <img src="{{ url_for('static', filename='icons/delete.png') }}" 
-                                                                    onclick="deleteFolder('{{ subchild.folder_name }}')" class="delete-icon" alt="Delete">
+                                                                <img src="{{ url_for('static', filename='icons/delete.png') }}" onclick="deleteFolder('{{ subfolder.folder_name }}')" class="delete-icon" alt="Delete">
                                                             {% endif %}
                                                         </span>
                                                     </li>
+
+                                                    <!-- Display PDFs in the subfolder if any -->
+                                                    {% if subfolder.files %}
+                                                        <ul>
+                                                            {% for pdf in subfolder.files %}
+                                                                <li class="pdf-item">
+                                                                    <a href="#" onclick="loadPDF('{{ pdf }}', '{{ department }}', '{{ folder_name }}', '{{ child_folder.folder_name }}', '{{ subfolder.folder_name }}'); return false;">{{ pdf }}</a>
+                                                                    {% if current_user.role_id == 1 or current_user.role_id == 0 or perm['delete'] %}
+                                                                        <img src="{{ url_for('static', filename='icons/delete.png') }}" onclick="deletePDF('{{ subfolder.folder_name }}', '{{ pdf }}')" class="delete-pdf-icon" alt="Delete">
+                                                                    {% endif %}
+                                                                </li>
+                                                            {% endfor %}
+                                                        </ul>
+                                                    {% endif %}
                                                 {% endfor %}
                                             </ul>
                                         </div>
@@ -136,19 +167,6 @@
                             </ul>
                         </div>
                     {% endif %}
-    
-                    <!-- Display PDFs in the folder -->
-                    <ul>
-                        {% for pdf in folder_data.files %}
-                            <li class="pdf-item">
-                                <a href="#" onclick="loadPDF('{{ pdf }}', '{{ department }}', '{{ folder_name }}'); return false;">{{ pdf }}</a>
-                                {% if current_user.role_id == 1 or current_user.role_id == 0 or perm['delete'] %}
-                                    <img src="{{ url_for('static', filename='icons/delete.png') }}" 
-                                        onclick="deletePDF('{{ folder_name }}', '{{ pdf }}')" class="delete-pdf-icon" alt="Delete">
-                                {% endif %}
-                            </li>
-                        {% endfor %}
-                    </ul>
                 {% endfor %}
             {% endfor %}
         </aside>

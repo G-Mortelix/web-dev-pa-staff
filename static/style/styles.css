@@ -322,7 +322,8 @@ header {
 }
 
 /* folder icon size */
-.folder-icon img, .subfolder-icon img{
+.folder-icon img, .subfolder-icon img,
+.subsubfolder-icon img{
     width: 18px;
     margin-right: 10px;
 }
@@ -353,8 +354,7 @@ header {
 
 .subsubfolder-icons .add-pdf-icon, 
 .subsubfolder-icons .edit-folder-icon, 
-.subsubfolder-icons .delete-icon,
-.subsubfolder-icon .folder-icon {
+.subsubfolder-icons .delete-icon {
     width: 12px;
     cursor: pointer;
     margin-left: 5px;
@@ -363,6 +363,11 @@ header {
 .folder-icons .add-subfolder-icon {
     width: 15px;
     cursor: pointer;
+    margin-left: 5px;
+}
+
+.subsubfolder-icon .folder-icon {
+    width: 12px;
     margin-left: 5px;
 }
 
