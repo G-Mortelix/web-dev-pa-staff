@@ -1,5 +1,5 @@
-import os, re, shutil
 from functools import wraps
+import os, re, shutil, logging
 from dotenv import load_dotenv
 from flask_migrate import Migrate
 from sqlalchemy import ForeignKey
@@ -96,7 +96,6 @@ class Folder(db.Model):
     def __repr__(self):
         return f"Folder({self.folder_name}, Parent: {self.parent_folder.folder_name if self.parent_folder else 'None'})"
 
-
 class PDF(db.Model):
     __tablename__ = 'pdfs'
     pdf_id = db.Column(db.Integer, primary_key=True)
@@ -183,20 +182,17 @@ def login():
     
     return render_template('login.html')
 
-
-# Utility function to handle the folder path sanitization and retrieval
-def get_sanitized_folder_path(department_name, folder_name):
-    """
-    Returns the sanitized path for a given folder under a department.
-    """
-    sanitized_folder_name = sanitize_folder_name(folder_name)
-    sanitized_dept_name = sanitize_folder_name(department_name)
-    return os.path.join(app.static_folder, 'pdffile', sanitized_dept_name, sanitized_folder_name)
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
 @app.route('/home')
 @login_required
 def home():
     pdf_structure = {}
+
+    # Get search and filter parameters from the form
+    search_query = request.args.get('search', '')
+    department_filter = request.args.get('department_filter', type=int)
+    has_pdfs_filter = request.args.get('has_pdfs', type=int)
 
     # Determine accessible departments based on the current user's role
     if current_user.role_id == 0:  # Master Admin
@@ -231,6 +227,9 @@ def home():
         # Fetch all folders (including parent and child folders) for the department
         all_folders = Folder.query.filter_by(dept_id=department.dept_id).all()
 
+        if department_filter and department.dept_id != department_filter:
+            continue  # Skip this department if it doesn't match the filter
+
         # Sort folders by numeric values (including decimals with two places)
         def folder_sort_key(folder):
             parts = re.split(r'(\d+(?:\.\d{1,2})?)', folder.folder_name)
@@ -253,6 +252,12 @@ def home():
             pdfs = PDF.query.filter_by(folder_id=folder.folder_id).all()
             pdf_files = [pdf.pdf_name for pdf in pdfs]
 
+            if search_query and search_query.lower() not in folder.folder_name.lower():
+                continue  # Skip folder if it doesn't match search
+
+            # Log PDFs for the parent folder
+            logging.debug(f"Parent Folder '{folder.folder_name}' PDFs: {pdf_files}")
+
             # Get child folders (direct children) for the current folder
             child_folders = [f for f in sorted_folders if f.parent_folder_id == folder.folder_id]
 
@@ -272,19 +277,51 @@ def home():
                     'child_folders': []  # Empty by default
                 }
 
+                # Get PDFs for the child folder
+                pdfs = PDF.query.filter_by(folder_id=child.folder_id).all()
+                pdf_files = [pdf.pdf_name for pdf in pdfs]
+                child_data["files"] = pdf_files  # Add PDFs to the child folder
+
+                if search_query and search_query.lower() not in child.folder_name.lower():
+                    continue  # Skip child if it doesn't match search
+
+                logging.debug(f"Child Folder '{child.folder_name}' PDFs: {pdf_files}")
+
                 # Get subchild folders (sub-subfolders) for the child folder
                 subchild_folders = [f for f in sorted_folders if f.parent_folder_id == child.folder_id]
-                child_data['child_folders'] = [
-                    {'folder_name': subchild.folder_name, 'folder_id': subchild.folder_id}
-                    for subchild in subchild_folders
-                ]
+                child_data['child_folders'] = []
+
+                for subchild in subchild_folders:
+                    subchild_pdfs = PDF.query.filter_by(folder_id=subchild.folder_id).all()  # Fetch PDFs for subchild folder
+                    subchild_pdf_files = [pdf.pdf_name for pdf in subchild_pdfs]
+
+                    # Add data for the subchild folder
+                    subchild_data = {
+                        'folder_name': subchild.folder_name,
+                        'folder_id': subchild.folder_id,
+                        'files': subchild_pdf_files  # Include PDFs for the subchild folder
+                    }
+
+                    # Log the PDFs for the subchild folder
+                    logging.debug(f"Subchild Folder '{subchild.folder_name}' PDFs: {subchild_pdf_files}")
+
+                    # Apply search filter for subchildren (partial matching)
+                    if search_query and search_query.lower() not in subchild.folder_name.lower():
+                        continue  # Skip subchild if it doesn't match search
+
+                    # Add subchild data to child folder's subchild list
+                    child_data['child_folders'].append(subchild_data)
+
+                # Log the subchild folders
+                if child_data['child_folders']:
+                    logging.debug(f"Subchild Folders for '{child.folder_name}': {child_data['child_folders']}")
+                else:
+                    logging.debug(f"No subchild folders for '{child.folder_name}'")
 
                 # Add the child data to the current parent folder structure
                 pdf_structure[department.dept_name][sanitized_folder_name]["child_folders"].append(child_data)
 
-    return render_template('index.html', pdf_structure=pdf_structure, permissions=permissions)
-
-
+    return render_template('index.html', pdf_structure=pdf_structure, permissions=permissions, departments=departments)
 
 
 

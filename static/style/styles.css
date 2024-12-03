@@ -292,6 +292,48 @@ header {
     height: 100vh;
 }
 
+.search-filter {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.filter-label {
+    margin-right: 5px;
+    font-weight: bold;
+}
+
+input[type="text"],
+select {
+    padding: 5px;
+    font-size: 14px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+.apply-button {
+    padding: 5px 10px;
+    background-color: #ffe100;
+    color: black;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.apply-button:hover {
+    background-color: #915e00;
+}
+
+.reset-button {
+    padding: 5px 10px;
+    color: white;
+    text-decoration: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
 /* dept layout */
 .department-container {
     display: flex;

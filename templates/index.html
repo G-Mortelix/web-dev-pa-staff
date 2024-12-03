@@ -32,6 +32,49 @@
     
     <div class="container">
         <aside class="sidebar" id="resizableSidebar">
+            <form method="GET" action="{{ url_for('home') }}">
+                <div class="search-filter">
+                    <!-- Search Bar -->
+                    <label for="search-input" class="filter-label">Search</label>
+                    <input
+                        id="search-input"
+                        type="text"
+                        name="search"
+                        placeholder="Enter folder or PDF name"
+                        value="{{ request.args.get('search', '') }}"
+                    />
+                    
+                    <!-- Department Filter -->
+                    <label for="department-filter" class="filter-label">Department</label>
+                    <select name="department_filter">
+                        <option value="">Select Department</option>
+                        {% for department in departments %}
+                            <option value="{{ department.dept_id }}" 
+                            {% if department.dept_id == request.args.get('department_filter') %} 
+                            selected {% endif %}>{{ department.dept_name }}</option>
+                        {% endfor %}
+                    </select>
+                    
+                    <!-- Has PDFs Checkbox -->
+                    <label for="has-pdfs" class="filter-label">
+                        <input
+                            id="has-pdfs"
+                            type="checkbox"
+                            name="has_pdfs"
+                            value="1"
+                            {% if request.args.get('has_pdfs') == '1' %} checked {% endif %}
+                        />
+                        Only folders with PDFs
+                    </label>
+                    
+                    <!-- Apply Filters Button -->
+                    <button type="submit" class="apply-button">Apply Filters</button>
+                    
+                    <!-- Reset Filters Button -->
+                    <a href="{{ url_for('home') }}" class="reset-button">Reset Filters</a>
+                </div>
+            </form>
+            
             {% for department, folders in pdf_structure.items() %}
                 <div class="department-container">
                     <h2 class="department-heading">{{ department }}</h2>
