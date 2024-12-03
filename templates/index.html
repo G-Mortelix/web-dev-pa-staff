@@ -7,7 +7,6 @@
     <script>
         pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.worker.min.js";
     </script>
-    <!-- Add jQuery CDN before your script -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 </head>
 <body>
@@ -39,11 +38,11 @@
                     {% if current_user.role_id == 1 or current_user.role_id == 0 %}
                         <span class="dept-icons">
                             <img src="{{ url_for('static', filename='icons/add-folder.png') }}" 
-                                 onclick="addFolder('{{ department }}')" class="add-folder-icon" alt="Add Folder">
+                                onclick="addFolder('{{ department }}')" class="add-folder-icon" alt="Add Folder">
                         </span>
                     {% endif %}
                 </div>
-    
+
                 {% for folder_name, folder_data in folders.items() %}
                     <div class="folder-container">
                         <span class="folder-icon">
@@ -73,7 +72,7 @@
                         <ul>
                             {% for pdf in folder_data.files %}
                                 <li class="pdf-item">
-                                    <a href="#" onclick="loadPDF('{{ pdf }}', '{{ department }}', '{{ folder_name }}'); return false;">{{ pdf }}</a>
+                                    <a href="#" onclick="loadPDF1('{{ pdf }}', '{{ department }}', '{{ folder_name }}'); return false;">{{ pdf }}</a>
                                     {% if current_user.role_id == 1 or current_user.role_id == 0 or perm['delete'] %}
                                         <img src="{{ url_for('static', filename='icons/delete.png') }}" onclick="deletePDF('{{ folder_name }}', '{{ pdf }}')" class="delete-pdf-icon" alt="Delete">
                                     {% endif %}
@@ -114,7 +113,7 @@
                                         <ul>
                                             {% for pdf in child_folder.files %}
                                                 <li class="pdf-item">
-                                                    <a href="#" onclick="loadPDF('{{ pdf }}', '{{ department }}', '{{ folder_name }}','{{ child_folder.folder_name }}'); return false;">{{ pdf }}</a>
+                                                    <a href="#" onclick="loadPDF2('{{ pdf }}', '{{ department }}', '{{ folder_name }}', '{{ child_folder.folder_name }}'); return false;">{{ pdf }}</a>
                                                     {% if current_user.role_id == 1 or current_user.role_id == 0 or perm['delete'] %}
                                                         <img src="{{ url_for('static', filename='icons/delete.png') }}" onclick="deletePDF('{{ child_folder.folder_name }}', '{{ pdf }}')" class="delete-pdf-icon" alt="Delete">
                                                     {% endif %}
@@ -151,7 +150,7 @@
                                                         <ul>
                                                             {% for pdf in subfolder.files %}
                                                                 <li class="pdf-item">
-                                                                    <a href="#" onclick="loadPDF('{{ pdf }}', '{{ department }}', '{{ folder_name }}', '{{ child_folder.folder_name }}', '{{ subfolder.folder_name }}'); return false;">{{ pdf }}</a>
+                                                                    <a href="#" onclick="loadPDF3('{{ pdf }}', '{{ department }}', '{{ folder_name }}', '{{ child_folder.folder_name }}', '{{ subfolder.folder_name }}'); return false;">{{ pdf }}</a>
                                                                     {% if current_user.role_id == 1 or current_user.role_id == 0 or perm['delete'] %}
                                                                         <img src="{{ url_for('static', filename='icons/delete.png') }}" onclick="deletePDF('{{ subfolder.folder_name }}', '{{ pdf }}')" class="delete-pdf-icon" alt="Delete">
                                                                     {% endif %}
@@ -232,7 +231,7 @@
         }
         
         // Function to load and render a PDF
-        function loadPDF(pdfPath, department, folder) {
+        function loadPDF1(pdfPath, department, folder) {
             // Use the updated sanitizeName function
             const sanitizedFolder = sanitizeName(folder);
             const sanitizedDepartment = sanitizeName(department);
@@ -269,6 +268,87 @@
                 alert('Failed to load PDF: ' + error.message);
             });
         }
+
+        function loadPDF2(pdfPath, department, folder, childFolder) {
+            const sanitizedFolder = sanitizeName(folder);
+            const sanitizedChildFolder = sanitizeName(childFolder);
+            const sanitizedDepartment = sanitizeName(department);
+            
+            // URL for child folder
+            const url = "{{ url_for('static', filename='pdffile') }}/" + sanitizedDepartment + "/" + sanitizedFolder + "/" + sanitizedChildFolder + "/" + pdfPath;
+
+            document.getElementById('loading-spinner').style.display = 'flex';
+            document.getElementById('welcome-message').style.display = 'none';
+            document.getElementById('pdf-viewer').innerHTML = '';
+
+            pdfjsLib.getDocument(url).promise.then(pdf => {
+                document.getElementById('loading-spinner').style.display = 'none';
+
+                for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+                    pdf.getPage(pageNum).then(page => {
+                        const scale = 1.0;
+                        const viewport = page.getViewport({ scale: scale });
+
+                        const canvas = document.createElement('canvas');
+                        const context = canvas.getContext('2d');
+                        canvas.height = viewport.height;
+                        canvas.width = viewport.width;
+
+                        document.getElementById('pdf-viewer').appendChild(canvas);
+
+                        page.render({
+                            canvasContext: context,
+                            viewport: viewport
+                        });
+                    });
+                }
+            }).catch(error => {
+                document.getElementById('loading-spinner').style.display = 'none';
+                alert('Failed to load PDF: ' + error.message);
+            });
+        }
+
+        function loadPDF3(pdfPath, department, folder, childFolder, subfolder) {
+            const sanitizedFolder = sanitizeName(folder);
+            const sanitizedChildFolder = sanitizeName(childFolder);
+            const sanitizedSubfolder = sanitizeName(subfolder);
+            const sanitizedDepartment = sanitizeName(department);
+            
+            // URL for subchild folder
+            const url = "{{ url_for('static', filename='pdffile') }}/" + sanitizedDepartment + "/" + sanitizedFolder + "/" + sanitizedChildFolder + "/" + sanitizedSubfolder + "/" + pdfPath;
+
+            document.getElementById('loading-spinner').style.display = 'flex';
+            document.getElementById('welcome-message').style.display = 'none';
+            document.getElementById('pdf-viewer').innerHTML = '';
+
+            pdfjsLib.getDocument(url).promise.then(pdf => {
+                document.getElementById('loading-spinner').style.display = 'none';
+
+                for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+                    pdf.getPage(pageNum).then(page => {
+                        const scale = 1.0;
+                        const viewport = page.getViewport({ scale: scale });
+
+                        const canvas = document.createElement('canvas');
+                        const context = canvas.getContext('2d');
+                        canvas.height = viewport.height;
+                        canvas.width = viewport.width;
+
+                        document.getElementById('pdf-viewer').appendChild(canvas);
+
+                        page.render({
+                            canvasContext: context,
+                            viewport: viewport
+                        });
+                    });
+                }
+            }).catch(error => {
+                document.getElementById('loading-spinner').style.display = 'none';
+                alert('Failed to load PDF: ' + error.message);
+            });
+        }
+
+
 
         function performAction(action, folderName = null, pdfName = null) {
             if (action === 'addFolder') {

@@ -193,42 +193,6 @@ def get_sanitized_folder_path(department_name, folder_name):
     sanitized_dept_name = sanitize_folder_name(department_name)
     return os.path.join(app.static_folder, 'pdffile', sanitized_dept_name, sanitized_folder_name)
 
-# Simplified backend logic to ensure both parent and child folders have files
-@app.route('/get_folders', methods=['GET'])
-@login_required
-def get_folders():
-    department = Department.query.filter_by(user_id=current_user.id).first()
-
-    # Fetch top-level folders (where parent_folder_id is None)
-    folders = Folder.query.filter_by(dept_id=department.dept_id, parent_folder_id=None).all()
-
-    folder_data = {}
-
-    for folder in folders:
-        # Fetch files for this folder (parent folder)
-        pdf_files = PDF.query.filter_by(folder_id=folder.folder_id).all()
-
-        # Initialize the folder data
-        folder_data[folder.folder_name] = {
-            'folder_id': folder.folder_id,
-            'files': [pdf.pdf_name for pdf in pdf_files]
-        }
-
-        # Fetch child folders for the current folder
-        child_folders = Folder.query.filter_by(parent_folder_id=folder.folder_id).all()
-
-        for child in child_folders:
-            # Fetch files for child folders
-            child_pdf_files = PDF.query.filter_by(folder_id=child.folder_id).all()
-
-            # Include child folder data with files
-            folder_data[folder.folder_name].setdefault('child_folders', []).append({
-                'folder_name': child.folder_name,
-                'files': [pdf.pdf_name for pdf in child_pdf_files]
-            })
-
-    return render_template('index.html', folder_data=folder_data, department=department)
-
 @app.route('/home')
 @login_required
 def home():
@@ -264,27 +228,35 @@ def home():
 
     # Build PDF structure for accessible departments
     for department in departments:
-        # Fetch all top-level folders (where parent_folder_id is None)
-        folders = Folder.query.filter_by(dept_id=department.dept_id, parent_folder_id=None).all()
-        pdf_structure[department.dept_name] = {}
+        # Fetch all folders (including parent and child folders) for the department
+        all_folders = Folder.query.filter_by(dept_id=department.dept_id).all()
 
         # Sort folders by numeric values (including decimals with two places)
         def folder_sort_key(folder):
             parts = re.split(r'(\d+(?:\.\d{1,2})?)', folder.folder_name)
             return [float(part) if part.replace('.', '', 1).isdigit() else part.lower() for part in parts]
 
-        sorted_folders = sorted(folders, key=folder_sort_key)
+        sorted_folders = sorted(all_folders, key=folder_sort_key)
 
-        # Loop through each folder and fetch its children
-        for folder in sorted_folders:
+        # Initialize dictionary for each department
+        pdf_structure[department.dept_name] = {}
+
+        # Create a dictionary to map folder_id to folder data for easy access
+        folder_map = {folder.folder_id: folder for folder in sorted_folders}
+
+        # Create a list to track folders we've already added as parents or children
+        parent_folders = [folder for folder in sorted_folders if folder.parent_folder_id is None]
+
+        # Loop through each folder to classify it and find its children and subchildren
+        for folder in parent_folders:
             sanitized_folder_name = sanitize_folder_name(folder.folder_name)
             pdfs = PDF.query.filter_by(folder_id=folder.folder_id).all()
             pdf_files = [pdf.pdf_name for pdf in pdfs]
 
-            # Get child folders (subfolders) for the current folder
-            child_folders = Folder.query.filter_by(parent_folder_id=folder.folder_id).all()
+            # Get child folders (direct children) for the current folder
+            child_folders = [f for f in sorted_folders if f.parent_folder_id == folder.folder_id]
 
-            # Map the folder and its child folders (recursive if needed)
+            # Initialize folder data for the parent folder
             pdf_structure[department.dept_name][sanitized_folder_name] = {
                 "files": pdf_files,
                 "dept_id": folder.dept_id,
@@ -292,25 +264,27 @@ def home():
                 "child_folders": []  # Initialize an empty list for child folders
             }
 
-            # For each child folder, add subfolders
+            # For each child folder, classify as subchild or child
             for child in child_folders:
                 child_data = {
                     'folder_name': child.folder_name,
                     'folder_id': child.folder_id,
                     'child_folders': []  # Empty by default
                 }
-                
-                # Get subchild folders (sub-subfolders)
-                subchild_folders = Folder.query.filter_by(parent_folder_id=child.folder_id).all()
+
+                # Get subchild folders (sub-subfolders) for the child folder
+                subchild_folders = [f for f in sorted_folders if f.parent_folder_id == child.folder_id]
                 child_data['child_folders'] = [
                     {'folder_name': subchild.folder_name, 'folder_id': subchild.folder_id}
                     for subchild in subchild_folders
                 ]
 
-                # Add the child data to the current folder structure
+                # Add the child data to the current parent folder structure
                 pdf_structure[department.dept_name][sanitized_folder_name]["child_folders"].append(child_data)
 
     return render_template('index.html', pdf_structure=pdf_structure, permissions=permissions)
+
+
 
 
 
