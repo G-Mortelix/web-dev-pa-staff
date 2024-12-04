@@ -289,7 +289,7 @@ header {
 .resizer {
     width: 8px;
     cursor: ew-resize;
-    height: 100vh;
+    height: auto;
 }
 
 .search-filter {
