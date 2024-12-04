@@ -254,7 +254,7 @@ header {
 /* sidebar title */
 .sidebar h2 {
     display: flex;
-    font-size: 1.2rem;
+    font-size: 1.35rem;
     align-items: center;
     margin-bottom: 10px;
     justify-content: space-between;
@@ -343,7 +343,7 @@ select {
 
 /* dept title size and design */
 .department-heading {
-    color: #333;
+    color: rgb(86, 0, 0);
     margin-top: 10px;
     font-size: 1.3rem;
     font-weight: bold;

@@ -40,7 +40,7 @@
                         id="search-input"
                         type="text"
                         name="search"
-                        placeholder="Enter folder or PDF name"
+                        placeholder="Enter folder name"
                         value="{{ request.args.get('search', '') }}"
                     />
                     
@@ -54,18 +54,6 @@
                             selected {% endif %}>{{ department.dept_name }}</option>
                         {% endfor %}
                     </select>
-                    
-                    <!-- Has PDFs Checkbox -->
-                    <label for="has-pdfs" class="filter-label">
-                        <input
-                            id="has-pdfs"
-                            type="checkbox"
-                            name="has_pdfs"
-                            value="1"
-                            {% if request.args.get('has_pdfs') == '1' %} checked {% endif %}
-                        />
-                        Only folders with PDFs
-                    </label>
                     
                     <!-- Apply Filters Button -->
                     <button type="submit" class="apply-button">Apply Filters</button>
