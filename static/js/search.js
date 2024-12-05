@@ -1,58 +1,30 @@
-document.addEventListener("DOMContentLoaded", function () {
-    const folderCardContainer = document.querySelector("[data-folder-container]");
-    const searchInput = document.querySelector("[data-search]");
-  
-    let folders = [];
-  
-    // Search Functionality
-    searchInput.addEventListener("input", e => {
-      const value = e.target.value.toLowerCase();
-      folders.forEach(folder => {
-        const isVisible =
-          folder.name.toLowerCase().includes(value) || // Check folder name
-          folder.files.some(file => file.toLowerCase().includes(value)); // Check PDF names
-        folder.element.classList.toggle("hide", !isVisible);
-      });
-    });
-  
-    // Fetch folder data from the backend
-    fetch("/api/folders")
-      .then(res => res.json())
-      .then(data => {
-        data.forEach(department => {
-          const departmentElement = document.createElement("div");
-          departmentElement.classList.add("department-container");
-  
-          const departmentHeader = document.createElement("h2");
-          departmentHeader.classList.add("department-heading");
-          departmentHeader.textContent = department.name;
-  
-          departmentElement.append(departmentHeader);
-  
-          department.folders.forEach(folder => {
-            const folderCard = document.createElement("div");
-            folderCard.classList.add("folder-card");
-  
-            const folderHeader = document.createElement("div");
-            folderHeader.classList.add("folder-header");
-            folderHeader.textContent = folder.name;
-  
-            const folderBody = document.createElement("div");
-            folderBody.classList.add("folder-body");
-            folderBody.innerHTML = folder.files
-              .map(file => `<a href="#">${file}</a>`)
-              .join("<br>");
-  
-            folderCard.append(folderHeader, folderBody);
-            departmentElement.append(folderCard);
-  
-            // Save folder info for filtering
-            folders.push({ name: folder.name, files: folder.files, element: folderCard });
+document.addEventListener('DOMContentLoaded', function () {
+  const searchInput = document.querySelector('input#search-input');
+  console.log('Search Input:', searchInput); // Log search input element
+
+  const departments = document.querySelectorAll('.department-container');
+  console.log('Departments:', departments); // Log all department containers
+
+  searchInput.addEventListener('input', function () {
+      const query = searchInput.value.toLowerCase();
+      console.log('Search Query:', query); // Log the current search query
+
+      departments.forEach(department => {
+          const folderContainers = department.querySelectorAll('[data-folder-container]');
+          console.log('Folder Containers:', folderContainers); // Log all folder containers in the current department
+
+          folderContainers.forEach(folder => {
+              const folderName = folder.dataset.folderName.toLowerCase();
+              console.log('Checking Folder Name:', folderName); // Log each folder's name
+
+              if (folderName.includes(query)) {
+                  console.log(`Showing folder: ${folderName}`); // Log visible folder
+                  folder.style.display = '';
+              } else {
+                  console.log(`Hiding folder: ${folderName}`); // Log hidden folder
+                  folder.style.display = 'none';
+              }
           });
-  
-          folderCardContainer.append(departmentElement);
-        });
-      })
-      .catch(error => console.error("Error fetching folder data:", error));
+      });
   });
-  
+});

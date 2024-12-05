@@ -8,8 +8,8 @@
         pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.worker.min.js";
     </script>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <!-- <script src="{{ url_for('static', filename='js/filter.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/search.js') }}"></script> -->
+    <!-- <script src="{{ url_for('static', filename='js/filter.js') }}"></script> -->
+    <script src="{{ url_for('static', filename='js/search.js') }}"></script>
 
 </head>
 <body>
@@ -78,7 +78,7 @@
                 </div>
 
                 {% for folder_name, folder_data in folders.items() %}
-                    <div class="folder-container" data-folder-container>
+                    <div class="folder-container" data-folder-container data-folder-name="{{ folder_name.lower() }}">
                         <span class="folder-icon">
                             <img src="{{ url_for('static', filename='icons/folder.png') }}" alt="Folder Icon">
                         </span>
