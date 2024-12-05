@@ -190,7 +190,6 @@ def home():
     pdf_structure = {}
 
     # Get search and filter parameters from the form
-    search_query = request.args.get('search', '')
     department_filter = request.args.get('department_filter', type=int)
     has_pdfs_filter = request.args.get('has_pdfs', type=int)
 
@@ -252,8 +251,11 @@ def home():
             pdfs = PDF.query.filter_by(folder_id=folder.folder_id).all()
             pdf_files = [pdf.pdf_name for pdf in pdfs]
 
-            if search_query and search_query.lower() not in folder.folder_name.lower():
-                continue  # Skip folder if it doesn't match search
+            # Apply 'has_pdfs_filter'
+            if has_pdfs_filter == 1 and not pdf_files:
+                continue  # Skip if no PDFs in folder and filter is set to show only folders with PDFs
+            elif has_pdfs_filter == 0 and pdf_files:
+                continue  # Skip if there are PDFs and filter is set to show only empty folders
 
             # Log PDFs for the parent folder
             logging.debug(f"Parent Folder '{folder.folder_name}' PDFs: {pdf_files}")
@@ -282,10 +284,13 @@ def home():
                 pdf_files = [pdf.pdf_name for pdf in pdfs]
                 child_data["files"] = pdf_files  # Add PDFs to the child folder
 
-                if search_query and search_query.lower() not in child.folder_name.lower():
-                    continue  # Skip child if it doesn't match search
-
                 logging.debug(f"Child Folder '{child.folder_name}' PDFs: {pdf_files}")
+
+                # Apply 'has_pdfs_filter' for child folders
+                if has_pdfs_filter == 1 and not pdf_files:
+                    continue  # Skip if no PDFs in child folder and filter is set to show only folders with PDFs
+                elif has_pdfs_filter == 0 and pdf_files:
+                    continue  # Skip if there are PDFs in child folder and filter is set to show only empty folders
 
                 # Get subchild folders (sub-subfolders) for the child folder
                 subchild_folders = [f for f in sorted_folders if f.parent_folder_id == child.folder_id]
@@ -305,10 +310,6 @@ def home():
                     # Log the PDFs for the subchild folder
                     logging.debug(f"Subchild Folder '{subchild.folder_name}' PDFs: {subchild_pdf_files}")
 
-                    # Apply search filter for subchildren (partial matching)
-                    if search_query and search_query.lower() not in subchild.folder_name.lower():
-                        continue  # Skip subchild if it doesn't match search
-
                     # Add subchild data to child folder's subchild list
                     child_data['child_folders'].append(subchild_data)
 
@@ -322,6 +323,7 @@ def home():
                 pdf_structure[department.dept_name][sanitized_folder_name]["child_folders"].append(child_data)
 
     return render_template('index.html', pdf_structure=pdf_structure, permissions=permissions, departments=departments)
+
 
 
 

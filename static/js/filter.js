@@ -1,76 +1,66 @@
 document.addEventListener("DOMContentLoaded", function () {
-    const searchInput = document.getElementById("search-input");
+    const folderElements = document.querySelectorAll(".folder-container");
 
-    searchInput.addEventListener("input", () => {
-        const query = searchInput.value.toLowerCase(); // Get the search query
-        filterFoldersAndFiles(query);
+    // Listen for clicks on each folder to load its content
+    folderElements.forEach(folder => {
+        folder.addEventListener("click", function () {
+            const folderName = folder.querySelector(".folder-name").textContent;
+            loadFolderContent(folderName);
+        });
     });
 });
 
-function filterFoldersAndFiles(query) {
-    const folderContainers = document.querySelectorAll(".folder-container");
-    const subfolderContainers = document.querySelectorAll(".subfolder-item");
-    const pdfItems = document.querySelectorAll(".pdf-item");
+// Load folder content dynamically (this includes subfolders, sub-subfolders, and files)
+function loadFolderContent(folderName) {
+    console.log(`Loading content for folder: ${folderName}`);
 
-    let hasMatch = false;
+    // Fetch folder content from the backend or mock data
+    fetch(`/folder-content/${folderName}`)
+        .then(response => response.json())
+        .then(data => {
+            const folderContainer = document.getElementById(`${folderName}-content`);
+            if (folderContainer) {
+                folderContainer.innerHTML = ''; // Clear previous content
 
-    // Filter parent folders
-    folderContainers.forEach(folder => {
-        const folderName = folder.querySelector(".folder-name").textContent.toLowerCase();
-        const folderMatches = folderName.includes(query);
+                // Render subfolders and sub-subfolders (3-tiered structure)
+                data.subfolders.forEach(subfolder => {
+                    const subfolderElement = document.createElement('div');
+                    subfolderElement.className = 'subfolder-item';
+                    subfolderElement.innerHTML = `
+                        <span class="subfolder-name" onclick="loadFolderContent('${subfolder.folder_name}')">${subfolder.folder_name}</span>
+                    `;
 
-        // Hide or show parent folder based on match
-        folder.style.display = folderMatches ? "block" : "none";
+                    // Render sub-subfolders (nested under subfolders)
+                    if (subfolder.subfolders && subfolder.subfolders.length > 0) {
+                        subfolderElement.innerHTML += `
+                            <div class="sub-subfolder-container" id="${subfolder.folder_name}-subsub">
+                                ${renderSubSubfolders(subfolder.subfolders)}
+                            </div>
+                        `;
+                    }
 
-        // If the folder matches, show it and its content
-        if (folderMatches) {
-            folder.style.display = "block";
-            hasMatch = true;
-        }
-    });
+                    folderContainer.appendChild(subfolderElement);
 
-    // Filter subfolders
-    subfolderContainers.forEach(subfolder => {
-        const subfolderName = subfolder.querySelector(".subfolder-name").textContent.toLowerCase();
-        const subfolderMatches = subfolderName.includes(query);
-
-        // Hide or show subfolder
-        subfolder.style.display = subfolderMatches ? "block" : "none";
-
-        // If the subfolder matches, ensure its parent is also visible
-        if (subfolderMatches) {
-            const parentFolder = subfolder.closest(".folder-container");
-            if (parentFolder) {
-                parentFolder.style.display = "block";
+                    // Render files (direct PDFs or documents)
+                    subfolder.files.forEach(file => {
+                        const fileElement = document.createElement('div');
+                        fileElement.className = 'pdf-item';
+                        fileElement.innerHTML = `<a href="#">${file}</a>`;
+                        folderContainer.appendChild(fileElement);
+                    });
+                });
+            } else {
+                console.error(`Folder container for ${folderName} not found`);
             }
-            hasMatch = true;
-        }
-    });
+        })
+        .catch(error => console.error('Error loading folder content:', error));
+}
 
-    // Filter PDFs
-    pdfItems.forEach(pdf => {
-        const pdfName = pdf.querySelector("a").textContent.toLowerCase();
-        const pdfMatches = pdfName.includes(query);
-
-        // Hide or show PDF
-        pdf.style.display = pdfMatches ? "block" : "none";
-
-        // If a PDF matches, ensure its parent folder is also visible
-        if (pdfMatches) {
-            const parentFolder = pdf.closest(".folder-container");
-            const parentSubfolder = pdf.closest(".subfolder-item");
-            if (parentFolder) {
-                parentFolder.style.display = "block";
-            }
-            if (parentSubfolder) {
-                parentSubfolder.style.display = "block";
-            }
-            hasMatch = true;
-        }
-    });
-
-    // If no matches, optionally display a "No results found" message
-    if (!hasMatch) {
-        console.log("No matches found");
-    }
+// Helper function to render sub-subfolders inside a subfolder
+function renderSubSubfolders(subSubfolders) {
+    return subSubfolders.map(subSubfolder => `
+        <div class="sub-subfolder-item">
+            <span class="sub-subfolder-name">${subSubfolder}</span>
+        </div>
+    `).join('');
 }
