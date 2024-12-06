@@ -300,6 +300,12 @@ header {
     margin-bottom: 20px;
 }
 
+.highlight {
+    background-color: yellow;
+    font-weight: bold;
+}
+
+
 .filter-label {
     margin-right: 5px;
     font-weight: bold;

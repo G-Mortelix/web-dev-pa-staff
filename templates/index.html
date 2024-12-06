@@ -8,8 +8,7 @@
         pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.worker.min.js";
     </script>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <!-- <script src="{{ url_for('static', filename='js/filter.js') }}"></script> -->
-    <script src="{{ url_for('static', filename='js/search.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/filter.js') }}"></script>
 
 </head>
 <body>
@@ -45,18 +44,20 @@
                         name="search"
                         placeholder="Enter folder name"
                         data-search
+                        value="{{ request.args.get('search', '') }}"
                     />
+
                     
                     <!-- Department Filter -->
-                    <label for="department-filter" class="filter-label">Department</label>
                     <select name="department_filter">
-                        <option value="">Select Department</option>
+                        <option value="" disabled selected>Select a Department to Filter</option>
                         {% for department in departments %}
                             <option value="{{ department.dept_id }}" 
                             {% if department.dept_id == request.args.get('department_filter') %} 
                             selected {% endif %}>{{ department.dept_name }}</option>
                         {% endfor %}
                     </select>
+                    
                     
                     <!-- Apply Filters Button -->
                     <button type="submit" class="apply-button">Apply Filters</button>

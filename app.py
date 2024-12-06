@@ -190,8 +190,8 @@ def home():
     pdf_structure = {}
 
     # Get search and filter parameters from the form
+    search_query = request.args.get('search', '').strip().lower()  # Get search query
     department_filter = request.args.get('department_filter', type=int)
-    has_pdfs_filter = request.args.get('has_pdfs', type=int)
 
     # Determine accessible departments based on the current user's role
     if current_user.role_id == 0:  # Master Admin
@@ -202,6 +202,10 @@ def home():
         user_departments = [ud.dept_id for ud in current_user.user_departments]
         # Include the "General" department (assuming dept_id = 4)
         departments = Department.query.filter(Department.dept_id.in_(user_departments + [4])).all()
+
+    # Apply department filter
+    if department_filter:
+        departments = [d for d in departments if d.dept_id == department_filter]
 
     # Fetch permissions for the current user
     user_permissions = Permission.query.filter_by(user_id=current_user.user_id).all()
@@ -223,13 +227,9 @@ def home():
 
     # Build PDF structure for accessible departments
     for department in departments:
-        # Fetch all folders (including parent and child folders) for the department
         all_folders = Folder.query.filter_by(dept_id=department.dept_id).all()
 
-        if department_filter and department.dept_id != department_filter:
-            continue  # Skip this department if it doesn't match the filter
-
-        # Sort folders by numeric values (including decimals with two places)
+        # Sort folders by numeric values
         def folder_sort_key(folder):
             parts = re.split(r'(\d+(?:\.\d{1,2})?)', folder.folder_name)
             return [float(part) if part.replace('.', '', 1).isdigit() else part.lower() for part in parts]
@@ -245,84 +245,68 @@ def home():
         # Create a list to track folders we've already added as parents or children
         parent_folders = [folder for folder in sorted_folders if folder.parent_folder_id is None]
 
-        # Loop through each folder to classify it and find its children and subchildren
+        # Loop through parent folders and build the structure
         for folder in parent_folders:
             sanitized_folder_name = sanitize_folder_name(folder.folder_name)
             pdfs = PDF.query.filter_by(folder_id=folder.folder_id).all()
             pdf_files = [pdf.pdf_name for pdf in pdfs]
 
-            # Apply 'has_pdfs_filter'
-            if has_pdfs_filter == 1 and not pdf_files:
-                continue  # Skip if no PDFs in folder and filter is set to show only folders with PDFs
-            elif has_pdfs_filter == 0 and pdf_files:
-                continue  # Skip if there are PDFs and filter is set to show only empty folders
-
-            # Log PDFs for the parent folder
-            logging.debug(f"Parent Folder '{folder.folder_name}' PDFs: {pdf_files}")
+            # Skip parent folders that don't match the search query and have no matching children
+            if search_query and search_query not in folder.folder_name.lower() and not pdf_files:
+                continue
 
             # Get child folders (direct children) for the current folder
             child_folders = [f for f in sorted_folders if f.parent_folder_id == folder.folder_id]
 
             # Initialize folder data for the parent folder
-            pdf_structure[department.dept_name][sanitized_folder_name] = {
+            parent_data = {
                 "files": pdf_files,
                 "dept_id": folder.dept_id,
                 "parent_folder_id": folder.folder_id,
-                "child_folders": []  # Initialize an empty list for child folders
+                "child_folders": []
             }
 
             # For each child folder, classify as subchild or child
             for child in child_folders:
-                child_data = {
-                    'folder_name': child.folder_name,
-                    'folder_id': child.folder_id,
-                    'child_folders': []  # Empty by default
-                }
+                child_pdfs = PDF.query.filter_by(folder_id=child.folder_id).all()
+                child_pdf_files = [pdf.pdf_name for pdf in child_pdfs]
 
-                # Get PDFs for the child folder
-                pdfs = PDF.query.filter_by(folder_id=child.folder_id).all()
-                pdf_files = [pdf.pdf_name for pdf in pdfs]
-                child_data["files"] = pdf_files  # Add PDFs to the child folder
-
-                logging.debug(f"Child Folder '{child.folder_name}' PDFs: {pdf_files}")
-
-                # Apply 'has_pdfs_filter' for child folders
-                if has_pdfs_filter == 1 and not pdf_files:
-                    continue  # Skip if no PDFs in child folder and filter is set to show only folders with PDFs
-                elif has_pdfs_filter == 0 and pdf_files:
-                    continue  # Skip if there are PDFs in child folder and filter is set to show only empty folders
+                # Skip child folders that don't match the search query and have no matching children
+                if search_query and search_query not in child.folder_name.lower() and not child_pdf_files:
+                    continue
 
                 # Get subchild folders (sub-subfolders) for the child folder
                 subchild_folders = [f for f in sorted_folders if f.parent_folder_id == child.folder_id]
-                child_data['child_folders'] = []
+                subchild_data_list = []
 
                 for subchild in subchild_folders:
-                    subchild_pdfs = PDF.query.filter_by(folder_id=subchild.folder_id).all()  # Fetch PDFs for subchild folder
+                    subchild_pdfs = PDF.query.filter_by(folder_id=subchild.folder_id).all()
                     subchild_pdf_files = [pdf.pdf_name for pdf in subchild_pdfs]
 
-                    # Add data for the subchild folder
-                    subchild_data = {
+                    # Skip subchild folders that don't match the search query
+                    if search_query and search_query not in subchild.folder_name.lower() and not subchild_pdf_files:
+                        continue
+
+                    # Add subchild data
+                    subchild_data_list.append({
                         'folder_name': subchild.folder_name,
                         'folder_id': subchild.folder_id,
-                        'files': subchild_pdf_files  # Include PDFs for the subchild folder
-                    }
+                        'files': subchild_pdf_files
+                    })
 
-                    # Log the PDFs for the subchild folder
-                    logging.debug(f"Subchild Folder '{subchild.folder_name}' PDFs: {subchild_pdf_files}")
+                # Add child data
+                parent_data["child_folders"].append({
+                    'folder_name': child.folder_name,
+                    'folder_id': child.folder_id,
+                    'files': child_pdf_files,
+                    'child_folders': subchild_data_list
+                })
 
-                    # Add subchild data to child folder's subchild list
-                    child_data['child_folders'].append(subchild_data)
-
-                # Log the subchild folders
-                if child_data['child_folders']:
-                    logging.debug(f"Subchild Folders for '{child.folder_name}': {child_data['child_folders']}")
-                else:
-                    logging.debug(f"No subchild folders for '{child.folder_name}'")
-
-                # Add the child data to the current parent folder structure
-                pdf_structure[department.dept_name][sanitized_folder_name]["child_folders"].append(child_data)
+            # Add parent folder to department structure
+            pdf_structure[department.dept_name][sanitized_folder_name] = parent_data
 
     return render_template('index.html', pdf_structure=pdf_structure, permissions=permissions, departments=departments)
+
 
 
 

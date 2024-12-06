@@ -1,30 +1,50 @@
 document.addEventListener('DOMContentLoaded', function () {
-  const searchInput = document.querySelector('input#search-input');
-  console.log('Search Input:', searchInput); // Log search input element
+    const searchInput = document.querySelector('input#search-input');
+    const departments = document.querySelectorAll('.department-container');
 
-  const departments = document.querySelectorAll('.department-container');
-  console.log('Departments:', departments); // Log all department containers
+    // Save original display states
+    departments.forEach(department => {
+        department.dataset.originalDisplay = department.style.display || '';
+        const folderContainers = department.querySelectorAll('[data-folder-container]');
+        folderContainers.forEach(folder => {
+            folder.dataset.originalDisplay = folder.style.display || '';
+        });
+    });
 
-  searchInput.addEventListener('input', function () {
-      const query = searchInput.value.toLowerCase();
-      console.log('Search Query:', query); // Log the current search query
+    // Add event listener for search
+    searchInput.addEventListener('input', function () {
+        const query = searchInput.value.toLowerCase().trim();
+        let anyDepartmentVisible = false; // Track if any department is visible
 
-      departments.forEach(department => {
-          const folderContainers = department.querySelectorAll('[data-folder-container]');
-          console.log('Folder Containers:', folderContainers); // Log all folder containers in the current department
+        // Process each department
+        departments.forEach(department => {
+            let departmentHasVisibleFolders = false; // Track if this department has visible folders
 
-          folderContainers.forEach(folder => {
-              const folderName = folder.dataset.folderName.toLowerCase();
-              console.log('Checking Folder Name:', folderName); // Log each folder's name
+            const folderContainers = department.querySelectorAll('[data-folder-container]');
 
-              if (folderName.includes(query)) {
-                  console.log(`Showing folder: ${folderName}`); // Log visible folder
-                  folder.style.display = '';
-              } else {
-                  console.log(`Hiding folder: ${folderName}`); // Log hidden folder
-                  folder.style.display = 'none';
-              }
-          });
-      });
-  });
+            // Process each folder in the department
+            folderContainers.forEach(folder => {
+                const folderName = folder.dataset.folderName.toLowerCase();
+                if (query && folderName.includes(query)) {
+                    folder.style.display = ''; // Show matching folder
+                    departmentHasVisibleFolders = true; // Mark this department as having visible folders
+                } else {
+                    folder.style.display = 'none'; // Hide non-matching folder
+                }
+            });
+
+            // Show or hide the department based on its folders' visibility
+            if (departmentHasVisibleFolders) {
+                department.style.display = ''; // Show department
+                anyDepartmentVisible = true; // Mark that at least one department is visible
+            } else {
+                department.style.display = 'none'; // Hide department
+            }
+        });
+
+        // If no departments are visible and query exists, hide everything
+        if (!anyDepartmentVisible && query) {
+            console.log('No matching results found for query:', query);
+        }
+    });
 });
