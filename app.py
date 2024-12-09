@@ -186,27 +186,30 @@ logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %
 
 @app.route('/search', methods=['GET'])
 def search_folders():
-    # Get the search query from the URL parameters
-    query = request.args.get('query', '').lower()  # Ensure case-insensitive search
+    # Get the search query and department filter from the URL parameters
+    query = request.args.get('query', '').lower()  # Case-insensitive search
+    department_filter = request.args.get('department_filter', type=int)
 
     if not query:
         return {'message': 'No search term provided'}, 400
 
     # Search for folders whose names contain the query term
-    # Using LIKE for case-insensitive search
     matching_folders = Folder.query.filter(Folder.folder_name.ilike(f'%{query}%')).all()
 
     # Group by department
     departments = {}
     for folder in matching_folders:
         dept_name = folder.department.name
+        if department_filter and dept_name != department_filter:
+            continue  # Skip folders not in the selected department
+
         if dept_name not in departments:
             departments[dept_name] = []
-        
+
         # Build the folder structure (consider parent-child relationships)
         departments[dept_name].append(build_folder_structure(folder))
 
-    return render_template('search_results.html', departments=departments)
+    return jsonify(departments)  # Return results as JSON for frontend AJAX to process
 
 # Helper function to recursively build folder structure
 def build_folder_structure(folder):
@@ -380,10 +383,11 @@ def build_subchild_data(subchild, search_query):
 
 def folder_sort_key(folder):
     """
-    Custom sort function to sort folders by numeric values in their names.
+    Custom sort function to sort folders by numeric values in their names
     """
     parts = re.split(r'(\d+(?:\.\d{1,2})?)', folder.folder_name)
     return [float(part) if part.replace('.', '', 1).isdigit() else part.lower() for part in parts]
+
 
 
 

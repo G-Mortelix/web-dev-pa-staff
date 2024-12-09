@@ -35,28 +35,26 @@
     
     <div class="container">
         <aside class="sidebar" id="resizableSidebar">
-            <form method="GET" action="{{ url_for('home') }}">
+            <form method="GET" action="{{ url_for('home') }}" id="search-form">
                 <div class="search-filter">
                     <!-- Search Bar -->
                     <label for="search-input" class="filter-label">Search</label>
-                    <input
-                        id="search-input"
-                        type="text"
-                        name="search"
-                        placeholder="Enter folder name"
-                        data-search
-                        value="{{ request.args.get('search', '') }}"
-                    />
+                    <input id="search-input" 
+                    type="text" name="search" 
+                    placeholder="Enter folder name" 
+                    data-search value="{{ request.args.get('search', '') }}">
+
                     
                     <!-- Department Filter -->
                     <select name="department_filter">
                         <option value="" disabled selected>Select a Department to Filter</option>
                         {% for department in departments %}
-                            <option value="{{ department.dept_id }}"
+                            <option value="{{ department.dept_id }}" 
                             {% if department.dept_id == request.args.get('department_filter') %} 
                             selected {% endif %}>{{ department.dept_name }}</option>
                         {% endfor %}
                     </select>
+                    
                     
                     <!-- Apply Filters Button -->
                     <button type="submit" class="apply-button">Search</button>
