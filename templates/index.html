@@ -9,6 +9,7 @@
     </script>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="{{ url_for('static', filename='js/filter.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/search.js') }}"></script>
 
 </head>
 <body>
@@ -46,26 +47,25 @@
                         data-search
                         value="{{ request.args.get('search', '') }}"
                     />
-
                     
                     <!-- Department Filter -->
                     <select name="department_filter">
                         <option value="" disabled selected>Select a Department to Filter</option>
                         {% for department in departments %}
-                            <option value="{{ department.dept_id }}" 
+                            <option value="{{ department.dept_id }}"
                             {% if department.dept_id == request.args.get('department_filter') %} 
                             selected {% endif %}>{{ department.dept_name }}</option>
                         {% endfor %}
                     </select>
                     
-                    
                     <!-- Apply Filters Button -->
-                    <button type="submit" class="apply-button">Apply Filters</button>
+                    <button type="submit" class="apply-button">Search</button>
                     
                     <!-- Reset Filters Button -->
                     <a href="{{ url_for('home') }}" class="reset-button">Reset Filters</a>
                 </div>
             </form>
+            <div id="search-results"></div>
             
             {% for department, folders in pdf_structure.items() %}
                 <div class="department-container">
@@ -79,7 +79,7 @@
                 </div>
 
                 {% for folder_name, folder_data in folders.items() %}
-                    <div class="folder-container" data-folder-container data-folder-name="{{ folder_name.lower() }}">
+                    <div class="folder-container">
                         <span class="folder-icon">
                             <img src="{{ url_for('static', filename='icons/folder.png') }}" alt="Folder Icon">
                         </span>
@@ -87,17 +87,21 @@
                         <span class="folder-icons">
                             {% set perm = permissions.get(folder_data.dept_id, {'write': False, 'delete': False}) %}
                             {% if current_user.role_id == 1 or current_user.role_id == 0 or perm['write'] %}
-                                <img src="{{ url_for('static', filename='icons/add-file.png') }}" onclick="addPDF('{{ folder_name }}')" class="add-pdf-icon" alt="Add PDF">
+                                <img src="{{ url_for('static', filename='icons/add-file.png') }}" 
+                                onclick="addPDF('{{ folder_name }}')" class="add-pdf-icon" alt="Add PDF">
                             {% endif %}
                             {% if current_user.role_id == 1 or current_user.role_id == 0 %}
-                                <img src="{{ url_for('static', filename='icons/edit.png') }}" onclick="editFolderPrompt('{{ folder_name }}')" class="edit-folder-icon" alt="Edit">
+                                <img src="{{ url_for('static', filename='icons/edit.png') }}" 
+                                onclick="editFolderPrompt('{{ folder_name }}')" class="edit-folder-icon" alt="Edit">
                             {% endif %}
                             {% if current_user.role_id == 1 or current_user.role_id == 0 %}
-                                <img src="{{ url_for('static', filename='icons/delete.png') }}" onclick="deleteFolder('{{ folder_name }}')" class="delete-icon" alt="Delete">
+                                <img src="{{ url_for('static', filename='icons/delete.png') }}" 
+                                onclick="deleteFolder('{{ folder_name }}')" class="delete-icon" alt="Delete">
                             {% endif %}
                             <!-- Add subfolder button -->
                             {% if current_user.role_id == 1 or current_user.role_id == 0 %}
-                                <img src="{{ url_for('static', filename='icons/add-folder.png') }}" onclick="addSubfolder('{{ folder_name }}', '{{ department }}')" class="add-subfolder-icon" alt="Add Subfolder">
+                                <img src="{{ url_for('static', filename='icons/add-folder.png') }}" 
+                                onclick="addSubfolder('{{ folder_name }}', '{{ department }}')" class="add-subfolder-icon" alt="Add Subfolder">
                             {% endif %}
                         </span>
                     </div>
@@ -107,9 +111,10 @@
                         <ul>
                             {% for pdf in folder_data.files %}
                                 <li class="pdf-item">
-                                    <a href="#" onclick="loadPDF1('{{ pdf }}', '{{ department }}', '{{ folder_name }}'); return false;">{{ pdf }}</a>
+                                    <a href="#" onclick="loadPDF('{{ pdf }}', '{{ department }}', '{{ folder_name }}'); return false;">{{ pdf }}</a>
                                     {% if current_user.role_id == 1 or current_user.role_id == 0 or perm['delete'] %}
-                                        <img src="{{ url_for('static', filename='icons/delete.png') }}" onclick="deletePDF('{{ folder_name }}', '{{ pdf }}')" class="delete-pdf-icon" alt="Delete">
+                                        <img src="{{ url_for('static', filename='icons/delete.png') }}" 
+                                        onclick="deletePDF('{{ folder_name }}', '{{ pdf }}')" class="delete-pdf-icon" alt="Delete">
                                     {% endif %}
                                 </li>
                             {% endfor %}
@@ -128,17 +133,21 @@
                                         <span class="subfolder-name">{{ child_folder.folder_name }}</span>
                                         <span class="subfolder-icons">
                                             {% if current_user.role_id == 1 or current_user.role_id == 0 %}
-                                                <img src="{{ url_for('static', filename='icons/add-file.png') }}" onclick="addPDF('{{ child_folder.folder_name }}')" class="add-pdf-icon" alt="Add PDF">
+                                                <img src="{{ url_for('static', filename='icons/add-file.png') }}" 
+                                                onclick="addPDF('{{ child_folder.folder_name }}')" class="add-pdf-icon" alt="Add PDF">
                                             {% endif %}
                                             {% if current_user.role_id == 1 or current_user.role_id == 0 %}
-                                                <img src="{{ url_for('static', filename='icons/edit.png') }}" onclick="editFolderPrompt('{{ child_folder.folder_name }}')" class="edit-folder-icon" alt="Edit">
+                                                <img src="{{ url_for('static', filename='icons/edit.png') }}" 
+                                                onclick="editFolderPrompt('{{ child_folder.folder_name }}')" class="edit-folder-icon" alt="Edit">
                                             {% endif %}
                                             {% if current_user.role_id == 1 or current_user.role_id == 0 %}
-                                                <img src="{{ url_for('static', filename='icons/delete.png') }}" onclick="deleteFolder('{{ child_folder.folder_name }}')" class="delete-icon" alt="Delete">
+                                                <img src="{{ url_for('static', filename='icons/delete.png') }}" 
+                                                onclick="deleteFolder('{{ child_folder.folder_name }}')" class="delete-icon" alt="Delete">
                                             {% endif %}
                                             <!-- Add subfolder button for child folder -->
                                             {% if current_user.role_id == 1 or current_user.role_id == 0 %}
-                                                <img src="{{ url_for('static', filename='icons/add-folder.png') }}" onclick="addSubfolder('{{ child_folder.folder_name }}', '{{ department }}')" class="add-subfolder-icon" alt="Add Subfolder">
+                                                <img src="{{ url_for('static', filename='icons/add-folder.png') }}" 
+                                                onclick="addSubfolder('{{ child_folder.folder_name }}', '{{ department }}')" class="add-subfolder-icon" alt="Add Subfolder">
                                             {% endif %}
                                         </span>
                                     </li>
@@ -148,9 +157,10 @@
                                         <ul>
                                             {% for pdf in child_folder.files %}
                                                 <li class="pdf-item">
-                                                    <a href="#" onclick="loadPDF2('{{ pdf }}', '{{ department }}', '{{ folder_name }}', '{{ child_folder.folder_name }}'); return false;">{{ pdf }}</a>
+                                                    <a href="#" onclick="loadPDF('{{ pdf }}', '{{ department }}', '{{ folder_name }}', '{{ child_folder.folder_name }}'); return false;">{{ pdf }}</a>
                                                     {% if current_user.role_id == 1 or current_user.role_id == 0 or perm['delete'] %}
-                                                        <img src="{{ url_for('static', filename='icons/delete.png') }}" onclick="deletePDF('{{ child_folder.folder_name }}', '{{ pdf }}')" class="delete-pdf-icon" alt="Delete">
+                                                        <img src="{{ url_for('static', filename='icons/delete.png') }}" 
+                                                        onclick="deletePDF('{{ child_folder.folder_name }}', '{{ pdf }}')" class="delete-pdf-icon" alt="Delete">
                                                     {% endif %}
                                                 </li>
                                             {% endfor %}
@@ -185,7 +195,7 @@
                                                         <ul>
                                                             {% for pdf in subfolder.files %}
                                                                 <li class="pdf-item">
-                                                                    <a href="#" onclick="loadPDF3('{{ pdf }}', '{{ department }}', '{{ folder_name }}', '{{ child_folder.folder_name }}', '{{ subfolder.folder_name }}'); return false;">{{ pdf }}</a>
+                                                                    <a href="#" onclick="loadPDF('{{ pdf }}', '{{ department }}', '{{ folder_name }}', '{{ child_folder.folder_name }}', '{{ subfolder.folder_name }}'); return false;">{{ pdf }}</a>
                                                                     {% if current_user.role_id == 1 or current_user.role_id == 0 or perm['delete'] %}
                                                                         <img src="{{ url_for('static', filename='icons/delete.png') }}" onclick="deletePDF('{{ subfolder.folder_name }}', '{{ pdf }}')" class="delete-pdf-icon" alt="Delete">
                                                                     {% endif %}
@@ -265,13 +275,19 @@
             return name.replace(/[<>:"/\\|?*]/g, '').trim();
         }
         
-        // Function to load and render a PDF
-        function loadPDF1(pdfPath, department, folder) {
-            // Use the updated sanitizeName function
-            const sanitizedFolder = sanitizeName(folder);
+        function sanitizeName(name) {
+            // Replace invalid characters as done in the backend
+            return name.replace(/[<>:"/\\|?*]/g, '').trim();
+        }
+
+        // Function to load and render a PDF from any folder depth
+        function loadPDF(pdfPath, department, ...folders) {
+            // Sanitize folder names dynamically
+            const sanitizedFolders = folders.map(sanitizeName);
             const sanitizedDepartment = sanitizeName(department);
 
-            const url = "{{ url_for('static', filename='pdffile') }}/" + sanitizedDepartment + "/" + sanitizedFolder + "/" + pdfPath;
+            // Construct the URL dynamically
+            const url = "{{ url_for('static', filename='pdffile') }}/" + sanitizedDepartment + "/" + sanitizedFolders.join("/") + "/" + pdfPath;
 
             document.getElementById('loading-spinner').style.display = 'flex';
             document.getElementById('welcome-message').style.display = 'none';
@@ -304,84 +320,6 @@
             });
         }
 
-        function loadPDF2(pdfPath, department, folder, childFolder) {
-            const sanitizedFolder = sanitizeName(folder);
-            const sanitizedChildFolder = sanitizeName(childFolder);
-            const sanitizedDepartment = sanitizeName(department);
-            
-            // URL for child folder
-            const url = "{{ url_for('static', filename='pdffile') }}/" + sanitizedDepartment + "/" + sanitizedFolder + "/" + sanitizedChildFolder + "/" + pdfPath;
-
-            document.getElementById('loading-spinner').style.display = 'flex';
-            document.getElementById('welcome-message').style.display = 'none';
-            document.getElementById('pdf-viewer').innerHTML = '';
-
-            pdfjsLib.getDocument(url).promise.then(pdf => {
-                document.getElementById('loading-spinner').style.display = 'none';
-
-                for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-                    pdf.getPage(pageNum).then(page => {
-                        const scale = 1.0;
-                        const viewport = page.getViewport({ scale: scale });
-
-                        const canvas = document.createElement('canvas');
-                        const context = canvas.getContext('2d');
-                        canvas.height = viewport.height;
-                        canvas.width = viewport.width;
-
-                        document.getElementById('pdf-viewer').appendChild(canvas);
-
-                        page.render({
-                            canvasContext: context,
-                            viewport: viewport
-                        });
-                    });
-                }
-            }).catch(error => {
-                document.getElementById('loading-spinner').style.display = 'none';
-                alert('Failed to load PDF: ' + error.message);
-            });
-        }
-
-        function loadPDF3(pdfPath, department, folder, childFolder, subfolder) {
-            const sanitizedFolder = sanitizeName(folder);
-            const sanitizedChildFolder = sanitizeName(childFolder);
-            const sanitizedSubfolder = sanitizeName(subfolder);
-            const sanitizedDepartment = sanitizeName(department);
-            
-            // URL for subchild folder
-            const url = "{{ url_for('static', filename='pdffile') }}/" + sanitizedDepartment + "/" + sanitizedFolder + "/" + sanitizedChildFolder + "/" + sanitizedSubfolder + "/" + pdfPath;
-
-            document.getElementById('loading-spinner').style.display = 'flex';
-            document.getElementById('welcome-message').style.display = 'none';
-            document.getElementById('pdf-viewer').innerHTML = '';
-
-            pdfjsLib.getDocument(url).promise.then(pdf => {
-                document.getElementById('loading-spinner').style.display = 'none';
-
-                for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-                    pdf.getPage(pageNum).then(page => {
-                        const scale = 1.0;
-                        const viewport = page.getViewport({ scale: scale });
-
-                        const canvas = document.createElement('canvas');
-                        const context = canvas.getContext('2d');
-                        canvas.height = viewport.height;
-                        canvas.width = viewport.width;
-
-                        document.getElementById('pdf-viewer').appendChild(canvas);
-
-                        page.render({
-                            canvasContext: context,
-                            viewport: viewport
-                        });
-                    });
-                }
-            }).catch(error => {
-                document.getElementById('loading-spinner').style.display = 'none';
-                alert('Failed to load PDF: ' + error.message);
-            });
-        }
 
         function performAction(action, folderName = null, pdfName = null) {
             if (action === 'addFolder') {
