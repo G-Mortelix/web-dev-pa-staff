@@ -1,33 +1,45 @@
-document.getElementById('search-form').addEventListener('submit', function(event) {
-  event.preventDefault();  // Prevent the form's default behavior
+console.log("JavaScript Loaded");  // Check if JS is running
 
-  const query = document.getElementById('search-input').value;  // Get the search query
-  const departmentFilter = document.querySelector('select[name="department_filter"]').value;  // Get selected department filter
+// Ensure the DOM is fully loaded before attaching the event listener
+document.addEventListener('DOMContentLoaded', function () {
+  const searchForm = document.getElementById('search-form');
 
-  // Send the request to the /search endpoint with query and department_filter
-  fetch(`/search?query=${encodeURIComponent(query)}&department_filter=${encodeURIComponent(departmentFilter)}`)
-      .then(response => response.json())
-      .then(data => {
-          const resultsContainer = document.getElementById('search-results');
-          resultsContainer.innerHTML = '';  // Clear any previous results
+  if (searchForm) {
+    searchForm.addEventListener('submit', function(event) {
+      event.preventDefault();  // Prevent the form's default behavior
 
-          // Loop through departments and create HTML for each one
-          for (let dept in data) {
-              const deptDiv = document.createElement('div');
-              deptDiv.classList.add('department');
-              deptDiv.innerHTML = `<h3>${dept}</h3>`;
+      const query = document.getElementById('search-input').value;  // Get the search query
+      const departmentFilter = document.querySelector('select[name="department_filter"]').value || '';
+      console.log(`Sending request to /search with query: ${query}, department_filter: ${departmentFilter}`);
 
-              // Loop through the folder structure for each department
-              data[dept].forEach(folder => {
-                  deptDiv.appendChild(createFolderElement(folder));  // Add each folder element
-              });
+      // Send the request to the /search endpoint with query and department_filter
+      fetch(`/search?query=${encodeURIComponent(query)}&department_filter=${encodeURIComponent(departmentFilter)}`)
+          .then(response => response.json())
+          .then(data => {
+              const resultsContainer = document.getElementById('search-results');
+              resultsContainer.innerHTML = '';  // Clear any previous results
 
-              resultsContainer.appendChild(deptDiv);  // Append the department div to results container
-          }
-      })
-      .catch(error => {
-          console.error('Error:', error);
-      });
+              // Loop through departments and create HTML for each one
+              for (let dept in data) {
+                  const deptDiv = document.createElement('div');
+                  deptDiv.classList.add('department');
+                  deptDiv.innerHTML = `<h3>${dept}</h3>`;
+
+                  // Loop through the folder structure for each department
+                  data[dept].forEach(folder => {
+                      deptDiv.appendChild(createFolderElement(folder));  // Add each folder element
+                  });
+
+                  resultsContainer.appendChild(deptDiv);  // Append the department div to results container
+              }
+          })
+          .catch(error => {
+              console.error('Error:', error);
+          });
+    });
+  } else {
+    console.error("The element with id 'search-form' was not found in the DOM.");
+  }
 });
 
 // Recursive function to create folder elements (with children)

@@ -10,7 +10,6 @@
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="{{ url_for('static', filename='js/filter.js') }}"></script>
     <script src="{{ url_for('static', filename='js/search.js') }}"></script>
-
 </head>
 <body>
     <header>
@@ -43,7 +42,6 @@
                     type="text" name="search" 
                     placeholder="Enter folder name" 
                     data-search value="{{ request.args.get('search', '') }}">
-
                     
                     <!-- Department Filter -->
                     <select name="department_filter">
@@ -54,7 +52,6 @@
                             selected {% endif %}>{{ department.dept_name }}</option>
                         {% endfor %}
                     </select>
-                    
                     
                     <!-- Apply Filters Button -->
                     <button type="submit" class="apply-button">Search</button>
@@ -81,6 +78,7 @@
                         <span class="folder-icon">
                             <img src="{{ url_for('static', filename='icons/folder.png') }}" alt="Folder Icon">
                         </span>
+
                         <span class="folder-name">{{ folder_name }}</span>
                         <span class="folder-icons">
                             {% set perm = permissions.get(folder_data.dept_id, {'write': False, 'delete': False}) %}
@@ -272,11 +270,6 @@
             // Replace invalid characters as done in the backend
             return name.replace(/[<>:"/\\|?*]/g, '').trim();
         }
-        
-        function sanitizeName(name) {
-            // Replace invalid characters as done in the backend
-            return name.replace(/[<>:"/\\|?*]/g, '').trim();
-        }
 
         // Function to load and render a PDF from any folder depth
         function loadPDF(pdfPath, department, ...folders) {
@@ -317,7 +310,6 @@
                 alert('Failed to load PDF: ' + error.message);
             });
         }
-
 
         function performAction(action, folderName = null, pdfName = null) {
             if (action === 'addFolder') {

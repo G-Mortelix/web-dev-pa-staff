@@ -194,15 +194,23 @@ def search_folders():
         return {'message': 'No search term provided'}, 400
 
     # Search for folders whose names contain the query term
-    matching_folders = Folder.query.filter(Folder.folder_name.ilike(f'%{query}%')).all()
+    if department_filter:
+        # Filter by both query and department
+        matching_folders = Folder.query.filter(
+            Folder.folder_name.ilike(f'%{query}%'),
+            Folder.dept_id == department_filter
+        ).all()
+    else:
+        # Only filter by query
+        matching_folders = Folder.query.filter(Folder.folder_name.ilike(f'%{query}%')).all()
+
+    # Debug: Print the matching_folders to check if any folders were found
+    print(f"Debug: Found matching folders - {matching_folders}")  # Debug statement
 
     # Group by department
     departments = {}
     for folder in matching_folders:
-        dept_name = folder.department.name
-        if department_filter and dept_name != department_filter:
-            continue  # Skip folders not in the selected department
-
+        dept_name = folder.dept_name
         if dept_name not in departments:
             departments[dept_name] = []
 
@@ -210,6 +218,7 @@ def search_folders():
         departments[dept_name].append(build_folder_structure(folder))
 
     return jsonify(departments)  # Return results as JSON for frontend AJAX to process
+
 
 # Helper function to recursively build folder structure
 def build_folder_structure(folder):
