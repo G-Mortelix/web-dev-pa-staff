@@ -8,7 +8,7 @@ from flask_sqlalchemy import SQLAlchemy
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
-from flask import Flask, render_template, redirect, url_for, request, flash, jsonify, session, abort, send_file
+from flask import Flask, json, render_template, redirect, url_for, request, flash, jsonify, session, abort, send_file
 
 load_dotenv()
 
@@ -77,6 +77,9 @@ class Folder(db.Model):
     parent_folder_id = db.Column(db.Integer, db.ForeignKey('folders.folder_id'), nullable=True)  # Self-reference for parent folder
     time_created = db.Column(db.DateTime, default=db.func.current_timestamp())
     
+    # Relationship to Department
+    department = db.relationship('Department', backref='folders')   
+
     # Relationship to parent folder
     parent_folder = db.relationship('Folder', remote_side=[folder_id])
 
@@ -186,39 +189,32 @@ logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %
 
 @app.route('/search', methods=['GET'])
 def search_folders():
-    # Get the search query and department filter from the URL parameters
-    query = request.args.get('query', '').lower()  # Case-insensitive search
+    query = request.args.get('query', '').lower()
     department_filter = request.args.get('department_filter', type=int)
 
     if not query:
         return {'message': 'No search term provided'}, 400
 
-    # Search for folders whose names contain the query term
+    # Filter folders by query and optionally by department
     if department_filter:
-        # Filter by both query and department
         matching_folders = Folder.query.filter(
             Folder.folder_name.ilike(f'%{query}%'),
             Folder.dept_id == department_filter
         ).all()
     else:
-        # Only filter by query
         matching_folders = Folder.query.filter(Folder.folder_name.ilike(f'%{query}%')).all()
 
-    # Debug: Print the matching_folders to check if any folders were found
-    print(f"Debug: Found matching folders - {matching_folders}")  # Debug statement
-
-    # Group by department
+    # Group results by department
     departments = {}
     for folder in matching_folders:
-        dept_name = folder.dept_name
+        dept_name = folder.department.dept_name
         if dept_name not in departments:
             departments[dept_name] = []
 
-        # Build the folder structure (consider parent-child relationships)
+        # Build detailed folder structure
         departments[dept_name].append(build_folder_structure(folder))
 
-    return jsonify(departments)  # Return results as JSON for frontend AJAX to process
-
+    return jsonify(departments)
 
 # Helper function to recursively build folder structure
 def build_folder_structure(folder):
@@ -228,11 +224,12 @@ def build_folder_structure(folder):
         'name': folder.folder_name,
         'children': []
     }
+
     # Include child folders (recursively)
     for child in folder.child_folders:
         folder_data['children'].append(build_folder_structure(child))
     return folder_data
-
+    
 @app.route('/home')
 @login_required
 def home():
@@ -258,7 +255,6 @@ def home():
 
     return render_template('index.html', pdf_structure=pdf_structure, permissions=permissions, departments=departments)
 
-
 def get_accessible_departments():
     """
     Returns the list of departments accessible to the current user.
@@ -271,7 +267,6 @@ def get_accessible_departments():
         user_departments = [ud.dept_id for ud in current_user.user_departments]
         return Department.query.filter(Department.dept_id.in_(user_departments + [4])).all()
 
-
 def get_user_permissions(departments):
     """
     Returns the user's permissions for the given departments.
@@ -283,7 +278,6 @@ def get_user_permissions(departments):
     # Add default permissions for departments without explicit permissions
     default_permissions = {dept.dept_id: {'write': False, 'delete': False} for dept in departments}
     return {**default_permissions, **user_permission_map}
-
 
 def build_pdf_structure(departments, search_query):
     """
@@ -312,8 +306,8 @@ def build_pdf_structure(departments, search_query):
             if parent_data:
                 pdf_structure[department.dept_name][folder.folder_name] = parent_data
 
+        print(json.dumps(pdf_structure, indent=4))
     return pdf_structure
-
 
 def build_folder_data(folder, sorted_folders, search_query):
     """
@@ -343,7 +337,6 @@ def build_folder_data(folder, sorted_folders, search_query):
 
     return parent_data
 
-
 def build_child_data(child, sorted_folders, search_query):
     """
     Builds data for a child folder, including its subchild folders.
@@ -371,7 +364,6 @@ def build_child_data(child, sorted_folders, search_query):
         'child_folders': subchild_data_list
     }
 
-
 def build_subchild_data(subchild, search_query):
     """
     Builds data for a subchild folder, including its PDFs.
@@ -389,7 +381,6 @@ def build_subchild_data(subchild, search_query):
         'files': pdf_files
     }
 
-
 def folder_sort_key(folder):
     """
     Custom sort function to sort folders by numeric values in their names
@@ -399,12 +390,11 @@ def folder_sort_key(folder):
 
 
 
-
 # SECTION BREAK!!
 # ROUTES FOR CONTENT MANAGEMENT
 @app.route('/add_folder', methods=['POST'])
 @login_required
-def add_folder():   
+def add_folder():
     if current_user.role_id not in [0, 1]:
         return jsonify(success=False, error="You do not have permission to add folders.")
 
