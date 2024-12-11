@@ -367,7 +367,7 @@ select {
 }
 
 /* folder layout */
-.folder-container, .subfolder-container{
+.folder-container{
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -382,7 +382,7 @@ select {
 }
 
 /* folder name design */
-.folder-name, .subfolder-name{
+.folder-name, .subfolder-name, .subsubfolder-name{
     flex-grow: 1;
     overflow-wrap: break-word;
 }

@@ -251,25 +251,33 @@ def get_user_permissions(departments):
     return {**default_permissions, **user_permission_map}
 
 def build_pdf_structure(departments, search_query=None):
+    """
+    Builds the folder structure for the given departments, filtering based on the search query.
+    """
     pdf_structure = {}
     for department in departments:
+        # Fetch all folders in the department
         all_folders = Folder.query.filter_by(dept_id=department.dept_id).all()
         sorted_folders = sorted(all_folders, key=folder_sort_key)
 
         pdf_structure[department.dept_name] = {}
+
+        # Get parent folders (those with no parent folder)
         parent_folders = [folder for folder in sorted_folders if folder.parent_folder_id is None]
 
+        # Loop through parent folders and build the structure
         for parent_folder in parent_folders:
-            folder_data = build_folder_data(parent_folder, sorted_folders)
+            folder_data = build_folder_data(parent_folder, sorted_folders, search_query)
             if folder_data:
                 pdf_structure[department.dept_name][parent_folder.folder_name] = folder_data
 
     return pdf_structure
 
 
-def build_folder_data(folder, sorted_folders):
+def build_folder_data(folder, sorted_folders, search_query=None):
     """
-    Builds data for a single folder, including its child and subchild folders.
+    Builds data for a single folder, including its child and subchild folders,
+    while filtering based on the search query.
     """
     # Fetch PDFs for this folder
     pdfs = PDF.query.filter_by(folder_id=folder.folder_id).all()
@@ -278,17 +286,32 @@ def build_folder_data(folder, sorted_folders):
     # Get child folders (direct children) for the current folder
     child_folders = [f for f in sorted_folders if f.parent_folder_id == folder.folder_id]
 
-    # Recursively build child folder data
-    child_folder_data = [build_folder_data(child, sorted_folders) for child in child_folders]
+    # Recursively build child folder data and filter based on search query
+    child_folder_data = []
+    for child in child_folders:
+        child_data = build_folder_data(child, sorted_folders, search_query)
+        if child_data:  # Include only matching children
+            child_folder_data.append(child_data)
 
-    return {
-        "folder_name": folder.folder_name,
-        "folder_id": folder.folder_id,
-        "files": pdf_files,
-        "child_folders": child_folder_data,
-        "dept_id": folder.dept_id,
-        "parent_folder_id": folder.parent_folder_id,
-    }
+    # Include the folder if:
+    # - It matches the search query
+    # - It has matching children
+    # - It has matching PDFs
+    if (
+        search_query is None or
+        search_query in folder.folder_name.lower() or
+        child_folder_data
+    ):
+        return {
+            "folder_name": folder.folder_name,
+            "folder_id": folder.folder_id,
+            "files": pdf_files if search_query in folder.folder_name.lower() else [],
+            "child_folders": child_folder_data,
+            "dept_id": folder.dept_id,
+            "parent_folder_id": folder.parent_folder_id,
+        }
+    return None  # Exclude folders that do not match
+
 
 def build_child_data(child, sorted_folders, search_query):
     """
