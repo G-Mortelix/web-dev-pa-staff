@@ -1,3 +1,5 @@
+console.log("JavaScript filter Loaded");  // Check if JS is running
+
 document.addEventListener("DOMContentLoaded", function () {
     const folderElements = document.querySelectorAll(".folder-container");
 

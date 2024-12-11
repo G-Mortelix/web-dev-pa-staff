@@ -1,79 +1,51 @@
-console.log("JavaScript Loaded");  // Check if JS is running
+document.getElementById('search-form').addEventListener('submit', function (event) {
+    event.preventDefault(); // Prevent default form submission
 
-// Ensure the DOM is fully loaded before attaching the event listener
-document.addEventListener('DOMContentLoaded', function () {
-  const searchForm = document.getElementById('search-form');
+    const query = document.getElementById('search-input').value.trim().toLowerCase();
+    const folderContainers = document.querySelectorAll('.folder-container');
 
-  if (searchForm) {
-    searchForm.addEventListener('submit', function(event) {
-      event.preventDefault();  // Prevent the form's default behavior
+    let matchFound = false;
 
-      const query = document.getElementById('search-input').value;  // Get the search query
-      const departmentFilter = document.querySelector('select[name="department_filter"]').value || '';
-      console.log(`Sending request to /search with query: ${query}, department_filter: ${departmentFilter}`);
+    // Filter existing folders
+    folderContainers.forEach(folder => {
+        const folderName = folder.querySelector('.folder-name').textContent.toLowerCase();
 
-      fetch(`/search?query=${encodeURIComponent(query)}&department_filter=${encodeURIComponent(departmentFilter)}`)
-        .then(response => response.json())
-        .then(data => {
-            const resultsContainer = document.getElementById('search-result');
-            resultsContainer.innerHTML = '';  // Clear previous results
-
-            // Loop through departments and render their folders
-            for (let dept in data) {
-                const deptDiv = document.createElement('div');
-                deptDiv.classList.add('department');
-                deptDiv.innerHTML = `<h3>${dept}</h3>`;
-
-                data[dept].forEach(folder => {
-                    deptDiv.appendChild(createFolderElement(folder));
-                });
-
-                resultsContainer.appendChild(deptDiv);
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-        });
-
+        if (folderName.includes(query)) {
+            folder.style.display = 'block'; // Show matching folders
+            matchFound = true;
+        } else {
+            folder.style.display = 'none'; // Hide non-matching folders
+        }
     });
-  } else {
-    console.error("The element with id 'search-form' was not found in the DOM.");
-  }
+
+    // Display a "No results" message if no matches are found
+    const noResultsMessage = document.getElementById('no-results');
+    if (!matchFound) {
+        if (!noResultsMessage) {
+            const message = document.createElement('p');
+            message.id = 'no-results';
+            message.textContent = 'No folders found matching your search criteria.';
+            document.querySelector('.folder-container-wrapper').appendChild(message);
+        }
+    } else if (noResultsMessage) {
+        noResultsMessage.remove(); // Remove message if matches are found
+    }
 });
 
-function createFolderElement(folder) {
-  const folderDiv = document.createElement('div');
-  folderDiv.classList.add('folder');
+document.querySelector('.reset-button').addEventListener('click', function (event) {
+    event.preventDefault();
 
-  // Folder name and parent folder (if available)
-  folderDiv.innerHTML = `
-      <p><strong>Folder:</strong> ${folder.folder_name}</p>
-      ${folder.parent_folder_name ? `<p><strong>Parent:</strong> ${folder.parent_folder_name}</p>` : ''}
-  `;
+    const folderContainers = document.querySelectorAll('.folder-container');
+    document.getElementById('search-input').value = ''; // Clear search input
 
-  // PDFs in the folder
-  if (folder.pdf_files && folder.pdf_files.length > 0) {
-      const pdfList = document.createElement('ul');
-      pdfList.classList.add('pdf-list');
-      folder.pdf_files.forEach(pdf => {
-          const pdfItem = document.createElement('li');
-          pdfItem.innerHTML = `
-              <a href="${pdf.pdf_path}" target="_blank">${pdf.pdf_name}</a>
-          `;
-          pdfList.appendChild(pdfItem);
-      });
-      folderDiv.appendChild(pdfList);
-  }
+    // Show all folders
+    folderContainers.forEach(folder => {
+        folder.style.display = 'block';
+    });
 
-  // Child folders
-  if (folder.child_folders && folder.child_folders.length > 0) {
-      const childFoldersDiv = document.createElement('div');
-      childFoldersDiv.classList.add('children');
-      folder.child_folders.forEach(child => {
-          childFoldersDiv.appendChild(createFolderElement(child));
-      });
-      folderDiv.appendChild(childFoldersDiv);
-  }
-
-  return folderDiv;
-}
+    // Remove "No results" message if it exists
+    const noResultsMessage = document.getElementById('no-results');
+    if (noResultsMessage) {
+        noResultsMessage.remove();
+    }
+});

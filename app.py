@@ -187,41 +187,12 @@ def login():
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
-@app.route('/search', methods=['GET'])
-def search_folders():
-    query = request.args.get('query', '').lower()
-    department_filter = request.args.get('department_filter', type=int)
-
-    if not query:
-        return {'message': 'No search term provided'}, 400
-
-    # Filter folders by query and optionally by department
-    if department_filter:
-        matching_folders = Folder.query.filter(
-            Folder.folder_name.ilike(f'%{query}%'),
-            Folder.dept_id == department_filter
-        ).all()
-    else:
-        matching_folders = Folder.query.filter(Folder.folder_name.ilike(f'%{query}%')).all()
-
-    # Group results by department
-    departments = {}
-    for folder in matching_folders:
-        dept_name = folder.department.dept_name
-        if dept_name not in departments:
-            departments[dept_name] = []
-
-        # Build detailed folder structure
-        departments[dept_name].append(build_folder_structure(folder))
-
-    return jsonify(departments)
-
 # Helper function to recursively build folder structure
 def build_folder_structure(folder):
     # This function would return a folder structure, including child folders
     folder_data = {
-        'id': folder.folder_id,
-        'name': folder.folder_name,
+        'folder_id': folder.folder_id,
+        'folder_name': folder.folder_name,
         'children': []
     }
 
@@ -279,63 +250,45 @@ def get_user_permissions(departments):
     default_permissions = {dept.dept_id: {'write': False, 'delete': False} for dept in departments}
     return {**default_permissions, **user_permission_map}
 
-def build_pdf_structure(departments, search_query):
-    """
-    Builds the folder structure for the given departments, filtering based on the search query.
-    """
+def build_pdf_structure(departments, search_query=None):
     pdf_structure = {}
-    
     for department in departments:
-        # Fetch all folders in the department
         all_folders = Folder.query.filter_by(dept_id=department.dept_id).all()
-
-        # Sort folders by numeric values in their names
         sorted_folders = sorted(all_folders, key=folder_sort_key)
 
         pdf_structure[department.dept_name] = {}
-
-        # Create folder map for easy access by folder_id
-        folder_map = {folder.folder_id: folder for folder in sorted_folders}
-
-        # Get parent folders (those with no parent folder)
         parent_folders = [folder for folder in sorted_folders if folder.parent_folder_id is None]
 
-        # Loop through parent folders and build the structure
-        for folder in parent_folders:
-            parent_data = build_folder_data(folder, sorted_folders, search_query)
-            if parent_data:
-                pdf_structure[department.dept_name][folder.folder_name] = parent_data
+        for parent_folder in parent_folders:
+            folder_data = build_folder_data(parent_folder, sorted_folders)
+            if folder_data:
+                pdf_structure[department.dept_name][parent_folder.folder_name] = folder_data
 
-        print(json.dumps(pdf_structure, indent=4))
     return pdf_structure
 
-def build_folder_data(folder, sorted_folders, search_query):
+
+def build_folder_data(folder, sorted_folders):
     """
     Builds data for a single folder, including its child and subchild folders.
     """
+    # Fetch PDFs for this folder
     pdfs = PDF.query.filter_by(folder_id=folder.folder_id).all()
     pdf_files = [pdf.pdf_name for pdf in pdfs]
 
-    # If search query exists, skip folders that don't match
-    if search_query and search_query not in folder.folder_name.lower() and not pdf_files:
-        return None
-
     # Get child folders (direct children) for the current folder
     child_folders = [f for f in sorted_folders if f.parent_folder_id == folder.folder_id]
-    
-    parent_data = {
+
+    # Recursively build child folder data
+    child_folder_data = [build_folder_data(child, sorted_folders) for child in child_folders]
+
+    return {
+        "folder_name": folder.folder_name,
+        "folder_id": folder.folder_id,
         "files": pdf_files,
+        "child_folders": child_folder_data,
         "dept_id": folder.dept_id,
-        "parent_folder_id": folder.folder_id,
-        "child_folders": []
+        "parent_folder_id": folder.parent_folder_id,
     }
-
-    for child in child_folders:
-        child_data = build_child_data(child, sorted_folders, search_query)
-        if child_data:
-            parent_data["child_folders"].append(child_data)
-
-    return parent_data
 
 def build_child_data(child, sorted_folders, search_query):
     """
