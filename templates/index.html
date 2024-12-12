@@ -9,7 +9,7 @@
     </script>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="{{ url_for('static', filename='js/filter.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/search.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/search2.js') }}"></script>
 </head>
 <body>
     <header>
@@ -57,7 +57,7 @@
                     <a href="{{ url_for('home') }}" class="reset-button" type="click">Reset Filters</a>
                 </div>
             </form>
-            <div id="search-result"></div>
+
             <div class="folder-container-wrapper">
                 {% for department, folders in pdf_structure.items() %}
                     <div class="department-container">
@@ -71,7 +71,7 @@
                     </div>
 
                     {% for folder_name, folder_data in folders.items() %}
-                        <div class="folder-container">
+                        <div class="folder-container" data-folderid="{{ folders.folderid }}" data-parentfolderid="{{ folders.parentfolderid }}">
                             <span class="folder-icon">
                                 <img src="{{ url_for('static', filename='icons/folder.png') }}" alt="Folder Icon">
                             </span>
