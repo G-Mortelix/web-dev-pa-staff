@@ -71,7 +71,7 @@
                     </div>
 
                     {% for folder_name, folder_data in folders.items() %}
-                        <div class="folder-container" data-folderid="{{ folders.folderid }}" data-parentfolderid="{{ folders.parentfolderid }}">
+                        <div class="folder-container" data-folderid="{{ folder_data.folder_id }}" data-parentfolderid="{{ folder_data.parent_folder_id }}">
                             <span class="folder-icon">
                                 <img src="{{ url_for('static', filename='icons/folder.png') }}" alt="Folder Icon">
                             </span>
@@ -119,7 +119,7 @@
                             <div class="subfolder-container">
                                 <ul>
                                     {% for child_folder in folder_data.child_folders %}
-                                        <li class="subfolder-item">
+                                        <li class="subfolder-item" data-folderid="{{ child_folder.folderid }}" data-parentfolderid="{{ folder_data.folderid }}">
                                             <span class="subfolder-icon">
                                                 <img src="{{ url_for('static', filename='icons/folder.png') }}" alt="Folder Icon">
                                             </span>
@@ -165,7 +165,7 @@
                                             <div class="subsubfolder-container">
                                                 <ul>
                                                     {% for subfolder in child_folder.child_folders %}
-                                                        <li class="subsubfolder-item">
+                                                        <li class="subsubfolder-item" data-folderid="{{ subfolder.folderid }}" data-parentfolderid="{{ folder_data.folderid }}">
                                                             <span class="subsubfolder-icon">
                                                                 <img src="{{ url_for('static', filename='icons/folder.png') }}" alt="Folder Icon">
                                                             </span>
