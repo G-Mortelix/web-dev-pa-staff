@@ -273,7 +273,6 @@ def build_pdf_structure(departments, search_query=None):
 
     return pdf_structure
 
-
 def build_folder_data(folder, sorted_folders, search_query=None):
     """
     Builds data for a single folder, including its child and subchild folders,
