@@ -284,10 +284,15 @@
 
             pdfjsLib.getDocument(url).promise.then(pdf => {
                 document.getElementById('loading-spinner').style.display = 'none';
+                
+                // Get container width to calculate scale
+                const containerWidth = mainContent.clientWidth - 40; // minus padding if any
 
                 for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
                     pdf.getPage(pageNum).then(page => {
-                        const scale = 1.0;
+                        const unscaledViewport = page.getViewport({ scale: 1 });
+                        let scale = containerWidth / unscaledViewport.width;
+                        
                         const viewport = page.getViewport({ scale: scale });
 
                         const canvas = document.createElement('canvas');

@@ -465,62 +465,64 @@ def edit_folder():
     data = request.get_json()
     old_folder_name = data.get('oldFolderName', '').strip()
     new_folder_name = data.get('newFolderName', '').strip()
-    new_parent_folder_name = data.get('newParentFolderName', '').strip()  # New field for parent folder
+    # newParentFolderName if you need to change parent folder, but here let's focus on the name first
+    new_parent_folder_name = data.get('newParentFolderName', '').strip()
 
-    # Retrieve the folder based on the old folder name
     folder = Folder.query.filter_by(folder_name=old_folder_name).first()
     if not folder:
         return jsonify(success=False, error="Folder not found.")
-    
-    # Preserve the original parent folder ID
-    original_parent_folder_id = folder.parent_folder_id
 
-    new_parent_folder = None
-    if new_parent_folder_name:
-        # Find the new parent folder if provided
-        new_parent_folder = Folder.query.filter_by(folder_name=new_parent_folder_name, dept_id=folder.dept_id).first()
-        if not new_parent_folder:
-            return jsonify(success=False, error="New parent folder not found.")
+    department = Department.query.get(folder.dept_id)
+    if not department:
+        return jsonify(success=False, error="Department not found.")
 
-    # Check if a folder with the new name already exists in the same department
+    # Check for duplicate folder name in the same department
     existing_folder = Folder.query.filter_by(folder_name=new_folder_name, dept_id=folder.dept_id).first()
     if existing_folder:
         return jsonify(success=False, error="A folder with this name already exists.")
 
-    # Update the folder name in the database
-    old_sanitized_folder_name = sanitize_folder_name(old_folder_name)
-    new_sanitized_folder_name = sanitize_folder_name(new_folder_name)
+    # Build old folder path
+    old_folder_path = build_folder_path(department.dept_name, old_folder_name, folder)
 
-    department = Department.query.get(folder.dept_id)
-    sanitized_dept_name = sanitize_folder_name(department.dept_name)
+    # Optionally change parent folder if needed (not strictly required for just renaming)
+    original_parent_folder_id = folder.parent_folder_id
+    new_parent_folder = None
+    if new_parent_folder_name:
+        new_parent_folder = Folder.query.filter_by(folder_name=new_parent_folder_name, dept_id=folder.dept_id).first()
+        if not new_parent_folder:
+            return jsonify(success=False, error="New parent folder not found.")
+        folder.parent_folder_id = new_parent_folder.folder_id
+    else:
+        # If no new parent folder is specified, keep the original parent
+        folder.parent_folder_id = original_parent_folder_id
 
-    old_folder_path = os.path.join(app.static_folder, 'pdffile', sanitized_dept_name, old_sanitized_folder_name)
-    new_folder_path = os.path.join(app.static_folder, 'pdffile', sanitized_dept_name, new_sanitized_folder_name)
+    # Update the folder name in the DB object (not committed yet)
+    folder.folder_name = new_folder_name
+
+    # Build new folder path using the updated folder name
+    new_folder_path = build_folder_path(department.dept_name, new_folder_name, folder)
 
     try:
-        # Rename the folder in the filesystem
+        # Rename the folder on the filesystem if the old folder exists
         if os.path.exists(old_folder_path):
             os.rename(old_folder_path, new_folder_path)
 
-        # Update the folder name in the database
-        folder.folder_name = new_folder_name
-
-        # Set the parent folder if a new parent is specified, otherwise preserve the original parent
-        folder.parent_folder_id = new_parent_folder.folder_id if new_parent_folder else original_parent_folder_id
-
-        # Update PDF paths in the database
+        # Update all PDF paths
         pdfs = PDF.query.filter_by(folder_id=folder.folder_id).all()
         for pdf in pdfs:
-            old_pdf_path = os.path.join(old_folder_path, pdf.pdf_name)
-            new_pdf_path = os.path.join(new_folder_path, pdf.pdf_name)
+            if pdf.pdf_path.startswith(old_folder_path):
+                pdf.pdf_path = pdf.pdf_path.replace(old_folder_path, new_folder_path, 1)
 
-            # Update the path in the database
-            pdf.pdf_path = new_pdf_path
-
+        # Commit changes to DB
         db.session.commit()
+
         return jsonify(success=True)
     except Exception as e:
+        # In case of error, rollback to avoid partial changes
         db.session.rollback()
+
+        # If the rename happened but DB commit failed, consider rolling back the filesystem rename
+        # But usually, an exception before commit means no DB changes were persisted
         return jsonify(success=False, error=f"Failed to rename folder: {e}")
 
 @app.route('/upload_pdf', methods=['POST'])
@@ -879,7 +881,14 @@ def edit_user(user_id):
         # Update the user's primary department (users.dept_id) to the first selected department
         user.dept_id = int(dept_ids[0])
         
+        # Remove permissions for departments the user no longer has
+        Permission.query.filter(
+            Permission.user_id == user.user_id,
+            ~Permission.dept_id.in_(dept_ids)
+        ).delete(synchronize_session=False)
+
         db.session.commit()
+
         flash(f"User '{username}' updated successfully!", 'success')
         return redirect(url_for('admin_dashboard'))
 

@@ -286,10 +286,18 @@ header {
     text-decoration: underline;
 }
 
+/* Collapsed sidebar state */
+.sidebar.collapsed {
+    width: 0 !important;
+    padding: 0 !important;
+    overflow: hidden;
+}
+
 .resizer {
     width: 8px;
     cursor: ew-resize;
     height: auto;
+    flex-shrink: 0;
 }
 
 .search-filter {
@@ -299,12 +307,6 @@ header {
     align-items: center;
     margin-bottom: 20px;
 }
-
-.highlight {
-    background-color: yellow;
-    font-weight: bold;
-}
-
 
 .filter-label {
     margin-right: 5px;
