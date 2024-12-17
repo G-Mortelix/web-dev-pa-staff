@@ -2,13 +2,11 @@ from functools import wraps
 import os, re, shutil, logging
 from dotenv import load_dotenv
 from flask_migrate import Migrate
-from sqlalchemy import ForeignKey
-from sqlalchemy.orm import joinedload
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
-from flask import Flask, json, render_template, redirect, url_for, request, flash, jsonify, session, abort, send_file
+from flask import Flask, render_template, redirect, url_for, request, flash, jsonify, session, abort, send_file
 
 load_dotenv()
 
