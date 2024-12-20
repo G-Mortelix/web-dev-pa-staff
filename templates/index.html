@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
     <title>Internal Website Pro Amity Corporate Sdn Bhd</title>
+    <link rel="icon" href="{{ url_for('static', filename='icons/title-logo.png') }}" type="image/png">
     <link rel="stylesheet" href="{{ url_for('static', filename='style/styles.css') }}">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.min.js"></script>
     <script>
@@ -10,6 +11,7 @@
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="{{ url_for('static', filename='js/filter.js') }}"></script>
     <script src="{{ url_for('static', filename='js/search.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/collapsible.js') }}"></script>
 </head>
 <body>
     <header>
@@ -71,7 +73,7 @@
                     </div>
 
                     {% for folder_name, folder_data in folders.items() %}
-                        <div class="folder-container" data-folderid="{{ folder_data.folder_id }}" data-parentfolderid="{{ folder_data.parent_folder_id }}">
+                        <div class="folder-container" data-department-id="{{ folder_data.dept_id }}" data-folderid="{{ folder_data.folder_id }}" data-parentfolderid="{{ folder_data.parent_folder_id }}">
                             <span class="folder-icon">
                                 <img src="{{ url_for('static', filename='icons/folder.png') }}" alt="Folder Icon">
                             </span>

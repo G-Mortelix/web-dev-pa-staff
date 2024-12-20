@@ -1,8 +1,9 @@
 from functools import wraps
-import os, re, shutil, logging
+from datetime import timedelta
 from dotenv import load_dotenv
 from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
+import os, re, shutil, logging, traceback
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
@@ -16,19 +17,33 @@ if not app.secret_key:
     raise ValueError("No secret key for this Flask app")
 
 app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('db_url')
-if not app.secret_key:
+if not app.config['SQLALCHEMY_DATABASE_URI']:
     raise ValueError("No database url for this Flask app")
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 migrate = Migrate (app, db)
 
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    'pool_pre_ping': True,  # Ensures the connection is alive before using it
+    'pool_size': 10,  # Number of connections in the pool
+    'pool_timeout': 30,  # Timeout for connection requests
+    'pool_recycle': 1800,  # Recycle connections after 30 minutes
+}
+
 application = app
+app.permanent_session_lifetime = timedelta(minutes=30)  # Adjust as needed
 
 # Setup Flask-Login
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
+
+# password generation
+# password = "ma-123"
+# hashed_password = generate_password_hash(password)
+
+# print(f"Hashed Password: {hashed_password}")
 
 # SECTION BREAKS!!
 # DATABASE MODELS
@@ -156,6 +171,15 @@ def admin_required(f):
 def load_user(user_id):
     return User.query.get(user_id)
 
+def redirect_root():
+    if current_user.is_authenticated:
+        return redirect(url_for('home'))
+    return redirect(url_for('login'))
+
+@app.route('/')
+def root():
+    return redirect_root()
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:
@@ -168,6 +192,7 @@ def login():
         user = User.query.filter_by(username=username).first()
         if user and check_password_hash(user.password_hash, password):
             login_user(user)
+            session.permanent = True
             flash('Login successful!', 'success')
             
             # Log successful login in the audit log
@@ -184,6 +209,11 @@ def login():
             flash('Invalid credentials. Please try again.', 'error')
     
     return render_template('login.html')
+
+@app.errorhandler(500)
+def internal_error(error):
+    app.logger.error(f"Server Error: {error}, Traceback: {traceback.format_exc()}")
+    return "Internal Server Error", 500
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -236,7 +266,7 @@ def get_accessible_departments():
         return Department.query.all()
     else:  # Regular users
         user_departments = [ud.dept_id for ud in current_user.user_departments]
-        return Department.query.filter(Department.dept_id.in_(user_departments + [4])).all()
+        return Department.query.filter(Department.dept_id.in_(user_departments + [1])).all()
 
 def get_user_permissions(departments):
     """
@@ -1146,4 +1176,4 @@ def logout():
     return redirect(url_for('login'))
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5001)
+    app.run(debug=True, port = 5001)

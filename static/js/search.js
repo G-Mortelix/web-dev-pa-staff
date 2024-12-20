@@ -1,5 +1,9 @@
+console.log("JavaScript search yurs Loaded");  // Check if JS is running
+console.log("Filter function loaded"); // Check if JS loads
+
 document.addEventListener("DOMContentLoaded", function () {
     const searchForm = document.getElementById("search-form");
+    let searchQuery = ""; // Default initialization in JavaScript
 
     // Build folder map (include child and subchild info)
     const folderMap = {};

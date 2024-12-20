@@ -368,6 +368,17 @@ select {
     cursor: pointer;
 }
 
+.collapse-btn {
+    font-weight: bold;
+    color: #333;
+    cursor: pointer;
+}
+
+.collapse-btn:hover {
+    color: blue;
+}
+
+
 /* folder layout */
 .folder-container{
     display: flex;
