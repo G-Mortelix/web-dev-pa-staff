@@ -25,7 +25,9 @@
                 <li><a href="javascript:void(0)" onclick="toggleSection('manageUsersSection')">Manage User</a></li>
                 <li><a href="javascript:void(0)" onclick="toggleSection('managePermissionsSection')">Manage Permissions</a></li>
                 <li><a href="javascript:void(0)" onclick="toggleSection('manageDepartmentSection')">Manage Department</a></li>
-                <li><a href="javascript:void(0)" onclick="toggleSection('auditLogsSection')">Audit Logs</a></li>
+                <li><a href="javascript:void(0)" onclick="console.log('Audit Logs link clicked!'); toggleSection('auditLogsSection');">Audit Logs</a></li>
+
+
             </ul>
         </aside>
 
@@ -260,7 +262,7 @@
                     </form>
                 </div>
             </div>
-            <!-- Audit Logs Section -->
+
             <div id="auditLogsSection" class="admin-section" style="display: none;">
                 <h2>Audit Logs</h2>
                 <table id="auditLogsTable" class="logs-table">
@@ -269,13 +271,12 @@
                             <th>User</th>
                             <th>Action</th>
                             <th>Target</th>
-                            <th>IP Address</th>
                             <th>Timestamp</th>
                             <th>Extra Data</th>
                         </tr>
                     </thead>
                     <tbody>
-                        <!-- Logs will be dynamically loaded here via JavaScript -->
+                        <!-- Logs will be dynamically added here -->
                     </tbody>
                 </table>
             </div>
@@ -320,45 +321,66 @@
         }
 
         function toggleSection(sectionId) {
+            console.log(`toggleSection called for: ${sectionId}`);
+
+            // Ensure all sections are hidden
             document.querySelectorAll('.admin-section').forEach(section => {
+                console.log(`Hiding section: ${section.id}`);
                 section.style.display = 'none';
             });
-            document.getElementById(sectionId).style.display = 'block';
 
-            if (sectionId === 'auditLogsSection') {
-                loadAuditLogs(); // Load logs when the Audit Logs section is opened
+            // Ensure the correct section is shown
+            const targetSection = document.getElementById(sectionId);
+            if (targetSection) {
+                console.log(`Showing section: ${sectionId}`);
+                targetSection.style.display = 'block';
+
+                if (sectionId === 'auditLogsSection') {
+                    console.log("Audit Logs Section opened, loading logs...");
+                    loadAuditLogs(); // Trigger log loading
+                }
+            } else {
+                console.warn(`Section with ID ${sectionId} not found.`);
             }
         }
 
+
         function loadAuditLogs() {
-            fetch('/fetch_audit_logs') // Backend route to fetch logs
-                .then(response => response.json())
+            console.log("Starting to load audit logs...");
+
+            fetch('/fetch_audit_logs')
+                .then(response => {
+                    console.log("Fetch response status:", response.status);
+                    if (!response.ok) {
+                        throw new Error("Failed to fetch logs.");
+                    }
+                    return response.json();
+                })
                 .then(data => {
+                    console.log("Data received:", data);
                     const tbody = document.querySelector('#auditLogsTable tbody');
-                    tbody.innerHTML = ''; // Clear previous logs
+                    tbody.innerHTML = '';
 
                     if (data.success) {
+                        console.log(`Rendering ${data.logs.length} logs`);
                         data.logs.forEach(log => {
                             const row = document.createElement('tr');
-
                             row.innerHTML = `
-                                <td>${log.user}</td>
+                                <td>${log.user || 'System'}</td>
                                 <td>${log.action}</td>
                                 <td>${log.target_file || 'N/A'}</td>
-                                <td>${log.ip_address || 'N/A'}</td>
                                 <td>${new Date(log.timestamp).toLocaleString()}</td>
-                                <td>${JSON.stringify(log.extra_data) || 'N/A'}</td>
+                                <td>${log.extra_data ? JSON.stringify(log.extra_data) : 'N/A'}</td>
                             `;
-
                             tbody.appendChild(row);
                         });
                     } else {
-                        alert('Failed to load audit logs.');
+                        console.error("Error:", data.error);
+                        alert("Failed to load audit logs.");
                     }
                 })
-                .catch(err => {
-                    console.error('Error loading logs:', err);
-                    alert('Error fetching audit logs. Check the console for details.');
+                .catch(error => {
+                    console.error("Error fetching logs:", error);
                 });
         }
 

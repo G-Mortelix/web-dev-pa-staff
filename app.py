@@ -1123,30 +1123,6 @@ def delete_department():
     return redirect(url_for('admin_dashboard'))
 
 # SECTION BREAK!!
-# MASTER ADMIN SECTION
-@app.route('/fetch_audit_logs', methods=['GET'])
-@login_required
-@admin_required
-def fetch_audit_logs():
-    logs = AuditLog.query.order_by(AuditLog.timestamp.desc()).limit(100).all()
-
-    serialized_logs = [
-        {
-            "user": log.user.username if log.user else "System",
-            "action": log.action,
-            "target_file": log.target_file,
-            "ip_address": log.ip_address,
-            "timestamp": log.timestamp.isoformat() if log.timestamp else None,
-            "extra_data": log.extra_data,
-        }
-        for log in logs
-    ]
-
-    return jsonify(success=True, logs=serialized_logs)
-
-
-
-# SECTION BREAK!!
 # LOG REPORT 
 @app.route('/view_pdf/<int:pdf_id>', methods=['GET'])
 @login_required
@@ -1165,6 +1141,30 @@ def view_pdf(pdf_id):
 
     # Return the PDF viewer (existing functionality)
     return send_file(pdf.pdf_path)
+
+@app.route('/fetch_audit_logs', methods=['GET'])
+@login_required
+@admin_required
+def fetch_audit_logs():
+    try:
+        logs = AuditLog.query.order_by(AuditLog.timestamp.desc()).limit(100).all()
+        print(f"Fetched {len(logs)} logs from the database.")
+        serialized_logs = [
+            {
+                "user": log.user.username if log.user else "System",
+                "action": log.action,
+                "target_file": log.target_file,
+                "timestamp": log.timestamp.isoformat() if log.timestamp else None,
+                "extra_data": log.extra_data,
+            }
+            for log in logs
+        ]
+        print("Serialized logs:", serialized_logs)
+        return jsonify(success=True, logs=serialized_logs)
+    except Exception as e:
+        print(f"Error fetching audit logs: {e}")
+        return jsonify(success=False, error="Failed to fetch logs")
+
 
 
 # LOGOUT
