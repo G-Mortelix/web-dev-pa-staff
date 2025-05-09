@@ -3,8 +3,8 @@ from datetime import timedelta
 from dotenv import load_dotenv
 from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
-import os, re, shutil, logging, traceback
 from werkzeug.utils import secure_filename
+import os, re, shutil, logging, traceback, time, json
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from flask import Flask, render_template, redirect, url_for, request, flash, jsonify, session, abort, send_file
@@ -39,11 +39,11 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 
-# password generation
-# password = "ma-123"
-# hashed_password = generate_password_hash(password)
+## password generation
+password = "jy-123"
+hashed_password = generate_password_hash(password)
 
-# print(f"Hashed Password: {hashed_password}")
+print(f"Hashed Password: {hashed_password}")
 
 # SECTION BREAKS!!
 # DATABASE MODELS
@@ -196,12 +196,9 @@ def login():
             flash('Login successful!', 'success')
             
             # Log successful login in the audit log
-            new_log = AuditLog(
-                user_id=user.user_id,  # Log the logged-in user's ID
+            log_audit(
                 action="Logged in",    # Action description
-                ip_address=request.remote_addr  # IP address of the client
             )
-            db.session.add(new_log)
             db.session.commit()
             
             return redirect(url_for('home'))
@@ -236,10 +233,7 @@ def build_folder_structure(folder):
 def home():
     # Get search and filter parameters from the form
     search_query = request.args.get('search', '').strip().lower()  # Search query
-    department_filter = request.args.get('department_filter', type=int)
-
-    print(f"Search Query: {search_query}")
-    print(f"Department Filter: {department_filter}")
+    department_filter = request.args.get('department_filter', type=int)  # Department filter
 
     # Determine accessible departments based on the user's role
     departments = get_accessible_departments()
@@ -437,6 +431,11 @@ def add_folder():
     folder_path = os.path.join(app.static_folder, 'pdffile', sanitized_dept_name, sanitized_folder_name)
     os.makedirs(folder_path, exist_ok=True)
 
+    log_audit(
+        action="Added Folder",
+        extra_data={"folder_name": folder_name, "department": dept_name, "parent_folder": parent_folder_name}
+    )
+
     return jsonify(success=True)
 
 @app.route('/add_subfolder', methods=['POST'])
@@ -476,6 +475,11 @@ def add_subfolder():
     folder_path = os.path.join(app.static_folder, 'pdffile', sanitized_dept_name, sanitized_folder_name)
     os.makedirs(folder_path, exist_ok=True)
 
+    log_audit(
+        action="Added Subfolder",
+        extra_data={"subfolder_name": folder_name, "parent_folder": parent_folder_name, "department": dept_name}
+    )
+
     return jsonify(success=True)
 
 def sanitize_folder_name(name):
@@ -495,7 +499,7 @@ def edit_folder():
     data = request.get_json()
     old_folder_name = data.get('oldFolderName', '').strip()
     new_folder_name = data.get('newFolderName', '').strip()
-    # newParentFolderName if you need to change parent folder, but here let's focus on the name first
+
     new_parent_folder_name = data.get('newParentFolderName', '').strip()
 
     folder = Folder.query.filter_by(folder_name=old_folder_name).first()
@@ -506,7 +510,6 @@ def edit_folder():
     if not department:
         return jsonify(success=False, error="Department not found.")
 
-    # Check for duplicate folder name in the same department
     existing_folder = Folder.query.filter_by(folder_name=new_folder_name, dept_id=folder.dept_id).first()
     if existing_folder:
         return jsonify(success=False, error="A folder with this name already exists.")
@@ -545,6 +548,12 @@ def edit_folder():
 
         # Commit changes to DB
         db.session.commit()
+
+        # Log folder edit
+        log_audit(
+            action="Edited Folder",
+            extra_data={"old_name": old_folder_name, "new_name": new_folder_name, "department": department.dept_name}
+        )
 
         return jsonify(success=True)
     except Exception as e:
@@ -621,14 +630,11 @@ def upload_pdf():
     db.session.add(new_pdf)
 
     # Log the file upload action
-    new_log = AuditLog(
-        user_id=current_user.user_id,
+    log_audit(
         action="Uploaded file",
         target_file=file_path,
-        ip_address=request.remote_addr,
         extra_data={"folder": folder_name, "department": department.dept_name, "filename": filename, "file_size": os.path.getsize(file_path)}
     )
-    db.session.add(new_log)
 
     # Commit the session
     try:
@@ -681,43 +687,85 @@ def delete_folder():
     sanitized_dept_name = sanitize_folder_name(department.dept_name)
     folder_path = os.path.join(app.static_folder, 'pdffile', sanitized_dept_name, sanitized_folder_name)
 
-    # Define a recursive function to delete child folders and the folder itself
-    def delete_recursive(folder):
-        # Delete all child folders recursively
-        child_folders = Folder.query.filter_by(parent_folder_id=folder.folder_id).all()
-        for child_folder in child_folders:
-            delete_recursive(child_folder)
-        
-        # Delete PDFs in this folder before removing it
-        pdfs = PDF.query.filter_by(folder_id=folder.folder_id).all()
-        for pdf in pdfs:
-            pdf_path = os.path.join(app.static_folder, 'pdffile', sanitized_dept_name, sanitized_folder_name, pdf.pdf_name)
-            try:
-                if os.path.exists(pdf_path):
-                    os.remove(pdf_path)
-                db.session.delete(pdf)
-            except Exception as e:
-                db.session.rollback()
-                return jsonify(success=False, error=f"Failed to delete PDF: {e}")
-
-        # After deleting child PDFs, remove the folder itself from the database
-        db.session.delete(folder)
-
     try:
-        # Start the recursive deletion from the current folder
+        # Delete associated records in the database
         delete_recursive(folder)
-        
-        # After all children and the folder are deleted, commit the session
-        db.session.commit()
-        
-        # Finally, remove the folder itself from the filesystem
-        if os.path.exists(folder_path):
-            os.rmdir(folder_path)
 
+        # Commit database changes
+        db.session.commit()
+
+        # Safely delete the folder from the filesystem
+        if os.path.exists(folder_path):
+            try:
+                shutil.rmtree(folder_path)  # Use shutil for recursive deletion
+                log_audit(
+                    action="Deleted Folder",
+                    extra_data={
+                        "folder_name": folder_name,
+                        "department": department.dept_name
+                    }
+                )
+            except PermissionError as e:
+                # Retry after a short delay to handle file locking
+                time.sleep(0.5)
+                try:
+                    shutil.rmtree(folder_path)
+                    log_audit(
+                        action="Deleted Folder",
+                        extra_data={
+                            "folder_name": folder_name,
+                            "department": department.dept_name,
+                            "retry": True
+                        }
+                    )
+                except Exception as final_e:
+                    app.logger.error(f"Failed to delete folder: {folder_path}, Error: {final_e}")
+                    log_audit(
+                        action="Failed to Delete Folder",
+                        extra_data={
+                            "folder_name": folder_name,
+                            "department": department.dept_name,
+                            "error": str(final_e)
+                        }
+                    )
+                    return jsonify(success=False, error=f"Failed to delete folder: {final_e}")
         return jsonify(success=True)
     except Exception as e:
         db.session.rollback()
+        app.logger.error(f"Error while deleting folder: {e}")
+        log_audit(
+            action="Failed to Delete Folder",
+            extra_data={
+                "folder_name": folder_name,
+                "department": department.dept_name,
+                "error": str(e)
+            }
+        )
         return jsonify(success=False, error=f"Failed to delete folder: {e}")
+
+
+def delete_recursive(folder):
+    """
+    Recursively delete folder and associated records in the database.
+    """
+    # Delete all child folders recursively
+    child_folders = Folder.query.filter_by(parent_folder_id=folder.folder_id).all()
+    for child_folder in child_folders:
+        delete_recursive(child_folder)
+
+    # Delete PDFs in this folder before removing it
+    pdfs = PDF.query.filter_by(folder_id=folder.folder_id).all()
+    for pdf in pdfs:
+        try:
+            if os.path.exists(pdf.pdf_path):
+                os.remove(pdf.pdf_path)
+            db.session.delete(pdf)
+        except Exception as e:
+            app.logger.error(f"Failed to delete PDF: {pdf.pdf_path}, Error: {e}")
+            raise e  # Re-raise the exception to handle in the main function
+
+    # Delete the folder itself from the database
+    db.session.delete(folder)
     
 @app.route('/delete_pdf', methods=['POST'])
 @login_required
@@ -755,14 +803,11 @@ def delete_pdf():
         db.session.delete(pdf)
 
         # Log the file deletion
-        new_log = AuditLog(
-            user_id=current_user.user_id,
+        log_audit(
             action="Deleted file",
             target_file=pdf_path,
-            ip_address=request.remote_addr,
             extra_data={"folder": folder_name, "department": department.dept_name}
         )
-        db.session.add(new_log)
 
         db.session.commit()
         return jsonify(success=True)
@@ -814,61 +859,68 @@ def register_user():
         username = request.form['username']
         password = request.form['password']
         role_id = request.form.get('role_id')
-        dept_ids = request.form.getlist('dept_ids')  # Get list of selected department IDs
+        dept_ids = request.form.getlist('dept_ids')
 
-        # Role restrictions
         if current_user.role_id == 1 and role_id in [0, 1]:
             flash("You do not have permission to register an admin or master admin.", "error")
             return redirect(url_for('register_user'))
 
-        # Validate inputs
         if not username or not password or not role_id:
             flash('All fields are required.', 'error')
             return redirect(url_for('register_user'))
-        
-        # Filter out invalid department IDs
-        dept_ids = [int(dept_id) for dept_id in dept_ids if dept_id.isdigit()]
 
-        # Set primary department for non-admin roles
+        dept_ids = [int(dept_id) for dept_id in dept_ids if dept_id.isdigit()]
         primary_dept_id = dept_ids[0] if dept_ids else None
 
-        # Prevent assigning departments to Admins and Master Admins
         if role_id in [0, 1] and dept_ids:
             flash("Admins and Master Admins cannot be assigned to any department.", "error")
             return redirect(url_for('register_user'))
-        
-        # Check if the username is already taken
+
         existing_user = User.query.filter_by(username=username).first()
         if existing_user:
             flash('Username already taken. Please choose a different one.', 'error')
-            return redirect(url_for('admin_dashboard'))  # Redirect back to admin dashboard
+            return redirect(url_for('admin_dashboard'))
 
-        if len(dept_ids) > 4:  # Limit departments to 4
+        if len(dept_ids) > 4:
             flash('A user cannot be assigned to more than 4 departments.', 'error')
             return redirect(url_for('admin_dashboard'))
 
-        # Hash the password
-        hashed_password = generate_password_hash(password)
-
-        primary_dept_id = int(dept_ids[0]) if dept_ids else None  # First selected dept as primary
-        new_user = User(username=username, password_hash=hashed_password, role_id=role_id, dept_id=primary_dept_id)
-        db.session.add(new_user)
-        db.session.flush()  # Flush to get the user_id
-
+        #validate the dept
         if dept_ids:
             valid_departments = [dept.dept_id for dept in departments]
             for dept_id in dept_ids:
                 if int(dept_id) not in valid_departments:
                     flash('Invalid department selected.', 'error')
                     return redirect(url_for('admin_dashboard'))
-                user_department = UserDepartment(user_id=new_user.user_id, dept_id=int(dept_id))
-                db.session.add(user_department)
+
+        hashed_password = generate_password_hash(password)
+        primary_dept_id = int(dept_ids[0]) if dept_ids else None
+
+        new_user = User(username=username, password_hash=hashed_password, role_id=role_id, dept_id=primary_dept_id)
+        db.session.add(new_user)
+        db.session.flush()
+
+        for dept_id in dept_ids:
+            user_department = UserDepartment(user_id=new_user.user_id, dept_id=int(dept_id))
+            db.session.add(user_department)
 
         db.session.commit()
+
+        # Fetch role name and department names for audit log
+        role_name = Role.query.get(role_id).role_name if Role.query.get(role_id) else "Unknown Role"
+        department_names = [Department.query.get(int(dept_id)).dept_name for dept_id in dept_ids if Department.query.get(int(dept_id))]
+
+        # Log audit
+        log_audit(
+            action="Registered User",
+            extra_data={"username": username, "role": role_name, "departments": department_names}
+        )
+
         flash('User registered successfully!', 'success')
         return redirect(url_for('admin_dashboard'))
 
     return render_template('admin_dashboard.html', roles=roles, departments=departments)
+
 
 @app.route('/edit_user/<int:user_id>', methods=['GET', 'POST'])
 @login_required
@@ -898,6 +950,16 @@ def edit_user(user_id):
             flash('A user cannot be assigned to more than 4 departments.', 'error')
             return redirect(url_for('admin_dashboard'))
 
+        # Gather changes for audit logging
+        changes = {}
+        if user.username != username:
+            changes['username'] = {'old': user.username, 'new': username}
+        if user.role_id != int(role_id):
+            changes['role_id'] = {'old': user.role_id, 'new': int(role_id)}
+        old_departments = [ud.dept_id for ud in user.user_departments]
+        if set(old_departments) != set(map(int, dept_ids)):
+            changes['departments'] = {'old': old_departments, 'new': list(map(int, dept_ids))}
+
         # Update username and role
         user.username = username
         user.role_id = int(role_id)
@@ -910,16 +972,25 @@ def edit_user(user_id):
 
         # Update the user's primary department (users.dept_id) to the first selected department
         user.dept_id = int(dept_ids[0])
-        
+
         # Remove permissions for departments the user no longer has
         Permission.query.filter(
             Permission.user_id == user.user_id,
             ~Permission.dept_id.in_(dept_ids)
         ).delete(synchronize_session=False)
 
-        db.session.commit()
+        try:
+            db.session.commit()
+            # Log audit
+            log_audit(
+                action="Edited User",
+                extra_data={"user_id": user_id, "changes": changes}
+            )
+            flash(f"User '{username}' updated successfully!", 'success')
+        except Exception as e:
+            db.session.rollback()
+            flash(f"Error updating user: {e}", 'error')
 
-        flash(f"User '{username}' updated successfully!", 'success')
         return redirect(url_for('admin_dashboard'))
 
     return render_template('admin_dashboard.html', user=user, departments=departments, roles=roles)
@@ -950,31 +1021,48 @@ def delete_user(user_id):
     try:
         user = User.query.get(user_id)
         if not user:
-            return jsonify(success=False, error="User not found")
+            flash("User not found.", "error")
             return redirect(url_for('admin_dashboard'))
 
         # Role-based checks
         if current_user.role_id == 1 and user.role_id != 2:  # Admin cannot delete Admin or Master Admin
-            return jsonify(success=False, error="You do not have permission to delete this user.")
+            flash("You do not have permission to delete this user.", "error")
+            return redirect(url_for('admin_dashboard'))
         elif current_user.role_id == 0 and user.role_id == 0:  # Master Admin cannot delete another Master Admin
-            return jsonify(success=False, error="You cannot delete another Master Admin.")
+            flash("You cannot delete another Master Admin.", "error")
+            return redirect(url_for('admin_dashboard'))
 
-        # Delete associated records in other tables
+        # Gather data for optional future audit
+        audit_data = {
+            "username": user.username,
+            "role_id": user.role_id,
+            "departments": [ud.dept_id for ud in user.user_departments]
+        }
+
+        log_audit(
+            action="Deleted User",
+            extra_data=audit_data
+        )
+
+        # Delete associated records
         Permission.query.filter_by(user_id=user_id).delete()
         AuditLog.query.filter_by(user_id=user_id).delete()
         UserDepartment.query.filter_by(user_id=user_id).delete()
 
-        # Perform deletion
+        # Delete the user
         db.session.delete(user)
         db.session.commit()
+
         return jsonify(success=True)
     
+        # Flash success message
         flash("User deleted successfully.", "success")
         return redirect(url_for('admin_dashboard'))
     except Exception as e:
         db.session.rollback()
         flash(f"Error deleting the user: {e}", "error")
         return redirect(url_for('admin_dashboard'))
+
 
 
 # SECTION BREAK!! 
@@ -984,11 +1072,11 @@ def delete_user(user_id):
 @login_required
 @admin_required
 def add_permission():
-    users = User.query.filter(User.role_id > 1).all()  # Exclude admins and master admins
+    users = User.query.filter(User.role_id > 1).all()
 
     if request.method == 'POST':
         user_id = request.form.get('user_id')
-        write_permissions = request.form.getlist('write_permission')  # List of selected department IDs
+        write_permissions = request.form.getlist('write_permission')
         delete_permissions = request.form.getlist('delete_permission')
 
         if not user_id:
@@ -1002,7 +1090,6 @@ def add_permission():
 
         user_departments = [ud.dept_id for ud in user.user_departments]
 
-        # Add or update permissions for each department
         for dept_id in user_departments:
             write_permission = str(dept_id) in write_permissions
             delete_permission = str(dept_id) in delete_permissions
@@ -1022,6 +1109,15 @@ def add_permission():
 
         try:
             db.session.commit()
+            # Log audit
+            log_audit(
+                action="Updated Permissions",
+                extra_data={
+                    "user_id": user_id,
+                    "write_permissions": write_permissions,
+                    "delete_permissions": delete_permissions
+                }
+            )
             flash('Permissions updated successfully!', 'success')
         except Exception as e:
             db.session.rollback()
@@ -1075,6 +1171,12 @@ def add_department():
     db.session.add(new_department)
     db.session.commit()
 
+    # Log audit
+    log_audit(
+        action="Added Department",
+        extra_data={"department_name": dept_name}
+    )
+
     flash('Department added successfully!', 'success')
     return redirect(url_for('admin_dashboard'))
 
@@ -1093,27 +1195,29 @@ def delete_department():
         return redirect(url_for('admin_dashboard'))
 
     try:
-        # Delete related folders and their PDFs
         folders = Folder.query.filter_by(dept_id=department.dept_id).all()
         for folder in folders:
-            # Delete PDFs in the folder
             PDFs = PDF.query.filter_by(folder_id=folder.folder_id).all()
             for pdf in PDFs:
-                # Remove the PDF file from the filesystem
                 if os.path.exists(pdf.pdf_path):
                     os.remove(pdf.pdf_path)
                 db.session.delete(pdf)
-            # Delete the folder record
             sanitized_folder_name = sanitize_folder_name(folder.folder_name)
             sanitized_dept_name = sanitize_folder_name(department.dept_name)
             folder_path = os.path.join(app.static_folder, 'pdffile', sanitized_dept_name, sanitized_folder_name)
             if os.path.exists(folder_path):
-                shutil.rmtree(folder_path)  # Remove folder from filesystem
+                shutil.rmtree(folder_path)
             db.session.delete(folder)
 
-        # Delete the department itself
         db.session.delete(department)
         db.session.commit()
+
+        # Log audit
+        log_audit(
+            action="Deleted Department",
+            extra_data={"department_name": dept_name}
+        )
+
         flash('Department and all associated data deleted successfully!', 'success')
         return redirect(url_for('admin_dashboard'))
     except Exception as e:
@@ -1130,40 +1234,126 @@ def view_pdf(pdf_id):
     pdf = PDF.query.get_or_404(pdf_id)
     
     # Log the file access
-    new_log = AuditLog(
-        user_id=current_user.user_id,
+    log_audit (
         action="Accessed file",
-        target_file=pdf.pdf_path,
-        ip_address=request.remote_addr
+        target_file=pdf.pdf_path
     )
-    db.session.add(new_log)
     db.session.commit()
 
     # Return the PDF viewer (existing functionality)
     return send_file(pdf.pdf_path)
+
+def log_audit(action, target_file=None, extra_data=None):
+    """Helper function to log audit actions."""
+    audit_log = AuditLog(
+        user_id=current_user.user_id if not current_user.is_anonymous else None,
+        action=action,
+        target_file=target_file,
+        ip_address=request.remote_addr,
+        extra_data=extra_data
+    )
+    db.session.add(audit_log)
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error logging audit action: {e}")
 
 @app.route('/fetch_audit_logs', methods=['GET'])
 @login_required
 @admin_required
 def fetch_audit_logs():
     try:
-        logs = AuditLog.query.order_by(AuditLog.timestamp.desc()).limit(100).all()
-        print(f"Fetched {len(logs)} logs from the database.")
-        serialized_logs = [
-            {
+        page = int(request.args.get('page', 1))  # Current page
+        per_page = int(request.args.get('per_page', 30))  # Logs per page
+        search_user = request.args.get('search', None)  # Search by username
+        role = request.args.get('role', None)  # Filter by role
+
+        logs_query = AuditLog.query.join(User).order_by(AuditLog.timestamp.desc())
+
+        # Search by username
+        if search_user:
+            logs_query = logs_query.filter(User.username.ilike(f"%{search_user}%"))
+
+        # Filter by role (ignore filter if role is empty or None)
+        if role and role.strip() != "":
+            role = int(role)  # Convert role to integer
+            logs_query = logs_query.filter(User.role_id == role)
+
+        # Paginate results
+        paginated_logs = logs_query.paginate(page=page, per_page=per_page, error_out=False)
+
+        # Process logs
+        serialized_logs = []
+        for log in paginated_logs.items:
+            # Deserialize and process extra_data
+            if log.extra_data:
+                try:
+                    extra_data = log.extra_data if isinstance(log.extra_data, dict) else json.loads(log.extra_data)
+                except Exception as e:
+                    print(f"Error parsing extra_data for log ID {log.log_id}: {e}")
+                    extra_data = {}
+
+                if log.action == "Uploaded file":
+                    processed_extra_data = {
+                        "folder": extra_data.get('folder', 'Unknown Folder'),
+                        "department": extra_data.get('department', 'Unknown Department'),
+                        "filename": extra_data.get('filename', 'Unknown File')
+                    }
+                elif log.action == "Deleted file":
+                    processed_extra_data = {
+                        "folder": extra_data.get('folder', 'Unknown Folder'),
+                        "department": extra_data.get('department', 'Unknown Department'),
+                        "deleted_file": extra_data.get('filename', 'Unknown File')
+                    }
+                elif log.action == "Added Folder" or log.action == "Deleted Folder":
+                    processed_extra_data = {
+                        "folder_name": extra_data.get('folder_name', 'Unknown Folder'),
+                        "department": extra_data.get('department', 'Unknown Department')
+                    }
+                elif log.action == "Registered User":
+                    processed_extra_data = {
+                        "username": extra_data.get('username', 'Unknown Username'),
+                        "role": extra_data.get('role', 'Unknown Role'),
+                        "departments": extra_data.get('departments', [])
+                    }
+                elif log.action == "Edited User":
+                    processed_extra_data = {
+                        "user_id": extra_data.get('user_id', 'Unknown User'),
+                        "changes": extra_data.get('changes', {})
+                    }
+                elif log.action == "Deleted User":
+                    processed_extra_data = {
+                        "username": extra_data.get('username', 'Unknown Username'),
+                        "role_id": extra_data.get('role_id', 'Unknown Role'),
+                        "departments": extra_data.get('departments', [])
+                    }
+                elif log.action == "Updated Permissions":
+                    processed_extra_data = {
+                        "user_id": extra_data.get('user_id', 'Unknown User'),
+                        "write_permission": extra_data.get('write_permission', 'Unknown Permission'),
+                        "delete_permission": extra_data.get('delete_permission', 'Unknown Permission')
+                    }
+                else:
+                    # Default handling for other actions
+                    processed_extra_data = extra_data
+            else:
+                processed_extra_data = "No Additional Information"
+
+            # Append processed log
+            serialized_logs.append({
                 "user": log.user.username if log.user else "System",
                 "action": log.action,
-                "target_file": log.target_file,
+                "target_file": log.target_file.split("/")[-1] if log.target_file else "No File Interacted",
                 "timestamp": log.timestamp.isoformat() if log.timestamp else None,
-                "extra_data": log.extra_data,
-            }
-            for log in logs
-        ]
-        print("Serialized logs:", serialized_logs)
-        return jsonify(success=True, logs=serialized_logs)
+                "extra_data": processed_extra_data,
+            })
+
+        return jsonify(success=True, logs=serialized_logs, total=paginated_logs.total, page=page, perPage=per_page)
     except Exception as e:
         print(f"Error fetching audit logs: {e}")
         return jsonify(success=False, error="Failed to fetch logs")
+
 
 
 
